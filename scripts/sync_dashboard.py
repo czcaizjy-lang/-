@@ -101,6 +101,7 @@ def run():
     daily_by_agency = defaultdict(lambda: defaultdict(float))
     anchor_daily_paid = defaultdict(lambda: defaultdict(float))
     anchor_daily_gmv = defaultdict(lambda: defaultdict(float))
+    anchor_daily_refund = defaultdict(lambda: defaultdict(float))
     anchor_daily_ad_cost = defaultdict(lambda: defaultdict(float))
 
     for r in range(2, ws_live.max_row + 1):
@@ -122,6 +123,7 @@ def run():
         daily_by_agency[agency][date_key] += gmv
         anchor_daily_paid[douyin_id][date_key] += paid
         anchor_daily_gmv[douyin_id][date_key] += gmv
+        anchor_daily_refund[douyin_id][date_key] += refund
         anchor_daily_ad_cost[douyin_id][date_key] += ad_cost
 
     # === 5. 整理日期 ===
@@ -148,6 +150,8 @@ def run():
     # === 7. 提取 person_daily（久酒/雅宁/星辞）===
     person_sheet_names = ['久酒业绩', '雅宁业绩', '星辞业绩']
     person_daily = {'dates': trend_dates}
+    person_daily_gmv = {'dates': trend_dates}
+    person_daily_refund = {'dates': trend_dates}
     for sheet_name in person_sheet_names:
         if sheet_name not in wb.sheetnames:
             continue
@@ -160,11 +164,19 @@ def run():
         if not person_douyin_ids:
             continue
         person_name = sheet_name.replace('业绩', '')
-        daily_values = []
+        paid_values = []
+        gmv_values = []
+        refund_values = []
         for full in all_dates:
             day_paid = sum(anchor_daily_paid.get(did, {}).get(full, 0) for did in person_douyin_ids)
-            daily_values.append(round(day_paid / 10000, 2))
-        person_daily[person_name] = daily_values
+            day_gmv = sum(anchor_daily_gmv.get(did, {}).get(full, 0) for did in person_douyin_ids)
+            day_refund = sum(anchor_daily_refund.get(did, {}).get(full, 0) for did in person_douyin_ids)
+            paid_values.append(round(day_paid / 10000, 2))
+            gmv_values.append(round(day_gmv / 10000, 2))
+            refund_values.append(round(day_refund / 10000, 2))
+        person_daily[person_name] = paid_values
+        person_daily_gmv[person_name] = gmv_values
+        person_daily_refund[person_name] = refund_values
 
     # === 8. 构建最终 JSON ===
     dashboard_data = {
@@ -187,6 +199,8 @@ def run():
                 for ag in daily_by_agency
             ],
             'person_daily': person_daily,
+            'person_daily_gmv': person_daily_gmv,
+            'person_daily_refund': person_daily_refund,
             'anchor_daily_paid': {
                 douyin_id: to_wan(by_date)
                 for douyin_id, by_date in anchor_daily_paid.items()

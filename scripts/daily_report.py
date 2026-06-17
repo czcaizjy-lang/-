@@ -90,15 +90,25 @@ def build_report(data: dict) -> list:
     ad_cost = summary["投放消耗金额"] / 10000
     commission = summary["佣金支出"] / 10000
 
-    # 昨日数据 (从 trend，单位已是万)
-    yesterday_gmv = get_daily_value(trend, "daily_total_gmv", yesterday_str)
-    yesterday_paid = get_daily_value(trend, "daily_total_paid", yesterday_str)
-    yesterday_refund = get_daily_value(trend, "daily_total_refund", yesterday_str)
+    # 星辞昨日数据 (从 person_daily_*)
+    def get_person_value(trend, key, person, date_str):
+        data = trend.get(key, {})
+        dates = data.get("dates", [])
+        if date_str not in dates:
+            return 0.0
+        idx = dates.index(date_str)
+        arr = data.get(person, [])
+        if idx < len(arr):
+            return float(arr[idx])
+        return 0.0
 
-    # 前日数据
-    before_gmv = get_daily_value(trend, "daily_total_gmv", day_before_str)
-    before_paid = get_daily_value(trend, "daily_total_paid", day_before_str)
-    before_refund = get_daily_value(trend, "daily_total_refund", day_before_str)
+    yesterday_gmv = get_person_value(trend, "person_daily_gmv", "星辞", yesterday_str)
+    yesterday_paid = get_person_value(trend, "person_daily", "星辞", yesterday_str)
+    yesterday_refund = get_person_value(trend, "person_daily_refund", "星辞", yesterday_str)
+
+    before_gmv = get_person_value(trend, "person_daily_gmv", "星辞", day_before_str)
+    before_paid = get_person_value(trend, "person_daily", "星辞", day_before_str)
+    before_refund = get_person_value(trend, "person_daily_refund", "星辞", day_before_str)
 
     # ---- 时间进度对标 ----
     days_passed = TODAY.day  # 当月已过天数
@@ -179,8 +189,8 @@ def build_report(data: dict) -> list:
         ]
     )
 
-    # === 二、昨日战报 ===
-    content.append([{"tag": "text", "text": "━ 昨日战报 ━\n"}])
+    # === 二、星辞昨日战报 ===
+    content.append([{"tag": "text", "text": "━ 星辞昨日战报 ━\n"}])
     content.append(
         [
             {
@@ -189,7 +199,7 @@ def build_report(data: dict) -> list:
                     f"📅 {yesterday_str}（{WEEKDAY_CN[YESTERDAY.weekday()]}）\n"
                     f"GMV：{fmt_wan(yesterday_gmv)}　"
                     f"环比{fmt_change(yesterday_gmv, before_gmv)}\n"
-                    f"支付：{fmt_wan(yesterday_paid)}　"
+                    f"支付GMV：{fmt_wan(yesterday_paid)}　"
                     f"环比{fmt_change(yesterday_paid, before_paid)}\n"
                     f"退款：{fmt_wan(yesterday_refund)}　"
                     f"环比{fmt_change(yesterday_refund, before_refund)}\n\n"
