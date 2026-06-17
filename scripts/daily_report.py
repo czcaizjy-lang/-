@@ -29,6 +29,8 @@ YESTERDAY = TODAY - timedelta(days=1)
 DAY_BEFORE = TODAY - timedelta(days=2)
 DAYS_IN_MONTH = 30  # 6月
 WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+# 主力机构（有明确归属的）
+MAIN_AGENCIES = ['自达号', '集米文化', '紫语', '花开满路', '太古', '亦初', '直属']
 
 
 def fmt_wan(val: float) -> str:
@@ -142,6 +144,9 @@ def build_report(data: dict) -> list:
         decline_pct = decline / b_val
         if decline > 0.1:  # 掉量 > 0.1万（1000元）才算
             info = id_to_info.get(douyin_id, {})
+            agency = info.get("机构", "")
+            if agency not in MAIN_AGENCIES:  # 只看有机构归属的
+                continue
             anchor_declines.append(
                 {
                     "name": info.get("主播昵称", douyin_id),
