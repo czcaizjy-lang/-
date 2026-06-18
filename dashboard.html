@@ -59,6 +59,17 @@ body {
 }
 .tab.active { background: var(--accent); color: #fff; }
 .tab:hover:not(.active) { color: var(--text); }
+.data-source-toggle {
+  display: flex; gap: 4px; background: var(--card); border-radius: 10px;
+  padding: 4px; border: 1px solid var(--border); margin-right: 8px;
+}
+.data-source-btn {
+  padding: 7px 14px; border-radius: 7px; font-size: 13px;
+  cursor: pointer; color: var(--text2); transition: all 0.2s;
+  border: none; background: none; white-space: nowrap;
+}
+.data-source-btn.active { background: var(--orange); color: #fff; }
+.data-source-btn:hover:not(.active) { color: var(--text); }
 .kpi-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px; margin-bottom: 28px;
@@ -88,6 +99,14 @@ thead th {
   border-bottom: 1px solid var(--border); white-space: nowrap;
   cursor: pointer; user-select: none; position: sticky; top: 0;
 }
+thead th .col-resize-handle {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 6px; cursor: col-resize; z-index: 10;
+}
+thead th .col-resize-handle:hover {
+  background: var(--accent);
+}
+thead th .col-resize-handle.active { background: var(--accent); }
 thead th:hover { color: var(--text); }
 thead th .sort-ind { font-size: 10px; margin-left: 4px; opacity: 0.4; }
 thead th .sort-ind.active { opacity: 1; color: var(--accent2); }
@@ -179,6 +198,10 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="subtitle">星辞 · 蕉下运动旗舰店 · <span id="updateTime"></span></div>
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
+    <div class="data-source-toggle">
+      <button class="data-source-btn active" data-source="all" onclick="switchDataSource('all')">全部</button>
+      <button class="data-source-btn" data-source="zidahao" onclick="switchDataSource('zidahao')">自达号</button>
+    </div>
     <div class="tabs">
       <button class="tab active" onclick="switchView('anchors')">达人明细</button>
       <button class="tab" onclick="switchView('agencies')">机构汇总</button>
@@ -189,7 +212,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <div class="kpi-grid" id="kpiGrid"></div>
 
-<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+<div id="progressSection" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
     <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;">
       <span style="width:3px;height:14px;background:var(--accent);border-radius:2px;display:inline-block;"></span>
@@ -242,8 +265,16 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="chart-grid">
-  <div class="chart-card">
-    <div class="chart-card-title">久酒 / 雅宁 / 星辞 分天业绩</div>
+  <div class="chart-card" id="personTrendCard">
+    <div class="chart-card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <span>久酒 / 雅宁 / 星辞 分天业绩</span>
+      <div style="display:flex;gap:4px;">
+        <button class="person-btn active" data-person="all" onclick="focusPerson('all')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:11px;cursor:pointer;transition:all 0.2s;">全部</button>
+        <button class="person-btn" data-person="久酒" onclick="focusPerson('久酒')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.2s;">久酒</button>
+        <button class="person-btn" data-person="雅宁" onclick="focusPerson('雅宁')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.2s;">雅宁</button>
+        <button class="person-btn" data-person="星辞" onclick="focusPerson('星辞')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.2s;">星辞</button>
+      </div>
+    </div>
     <div class="chart-canvas-wrap"><canvas id="personTrendChart"></canvas></div>
   </div>
   <div class="chart-card">
@@ -303,6 +334,10 @@ let DATA = null;
 let sortCol = '直播GMV';
 let sortDir = -1;
 let currentTheme = 'dark';
+let currentDataSource = 'all';  // 'all' | 'zidahao'
+
+const ZDH_SUB_AGENCIES = ['花开自达号', '集米自达号', '太古自达号', '九三自达号', '直属自达号'];
+const ZDH_PIE_COLORS = ['#818cf8','#22c55e','#f59e0b','#ec4899','#14b8a6'];
 
 // 根据当前主题返回 Chart.js 需要的颜色
 function getChartColors() {
@@ -341,6 +376,22 @@ function applyTheme(theme) {
 
 function toggleTheme() {
   applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+}
+
+function switchDataSource(source) {
+  currentDataSource = source;
+  // Update button states
+  document.querySelectorAll('.data-source-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-source') === source);
+  });
+  // Destroy all charts to prevent canvas conflicts
+  ['__totalChart','__agencyChart','__personChart','__agencyPieChart','__agencyDrillChart'].forEach(k => {
+    if (window[k]) { window[k].destroy(); window[k] = null; }
+  });
+  // Close any open drill modal
+  document.getElementById('agencyDrillModal').style.display = 'none';
+  // Re-render everything
+  render();
 }
 
 // 页面加载时恢复主题
@@ -391,6 +442,41 @@ const MAIN_AGENCIES = ['自达号', '集米文化', '紫语', '花开满路', '�
 const PIE_COLORS = ['#818cf8','#22c55e','#f59e0b','#3b82f6','#ec4899','#a78bfa','#14b8a6','#f97316'];
 
 function renderKPIs() {
+  // 自达号模式：4 卡片
+  if (currentDataSource === 'zidahao') {
+    const z = DATA.zidahao;
+    if (!z || !z.summary) return;
+    const s = z.summary;
+    const total = s['直播GMV'] || 0;
+    const settled = s['直播结算GMV'] || 0;
+    const adCost = s['消耗金额'] || 0;
+    const roi = s['ROI'] || 0;
+    const html = `
+      <div class="kpi-card">
+        <div class="kpi-label">总直播GMV（自达号）</div>
+        <div class="kpi-value">${fmt(total, 'money')}</div>
+        <div class="kpi-sub">${z.anchors ? z.anchors.length : 0} 位达人</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">直播结算GMV</div>
+        <div class="kpi-value green">${fmt(settled, 'money')}</div>
+        <div class="kpi-sub">结算率 ${total > 0 ? ((settled/total)*100).toFixed(1) : '0'}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">消耗金额</div>
+        <div class="kpi-value orange">${fmt(adCost, 'money')}</div>
+        <div class="kpi-sub">费比 ${total > 0 ? ((adCost/total)*100).toFixed(1) : '0'}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">ROI</div>
+        <div class="kpi-value blue">${parseFloat(roi).toFixed(1)}</div>
+        <div class="kpi-sub">GMV / 投放消耗</div>
+      </div>
+    `;
+    document.getElementById('kpiGrid').innerHTML = html;
+    return;
+  }
+
   const s = DATA.summary;
   const total = s['直播GMV'] || 0;
   const settled = s['直播结算GMV'] || 0;
@@ -421,6 +507,15 @@ function renderKPIs() {
 }
 
 function renderProgress() {
+  // 自达号模式：隐藏进度区块
+  if (currentDataSource === 'zidahao') {
+    const ps = document.getElementById('progressSection');
+    if (ps) ps.style.display = 'none';
+    return;
+  }
+  const ps = document.getElementById('progressSection');
+  if (ps) ps.style.display = '';
+
   const targetInput = document.getElementById('targetGmvInput');
   const stored = localStorage.getItem('targetGmvWan');
   if (stored) {
@@ -462,6 +557,19 @@ function updateProgress() {
 
 function renderTrendCharts() {
   if (!DATA || !DATA.trend) return;
+
+  // Hide person trend card in 自达号 mode
+  const personCard = document.getElementById('personTrendCard');
+  if (personCard) {
+    personCard.style.display = currentDataSource === 'zidahao' ? 'none' : '';
+  }
+
+  // 自达号模式：使用独立渲染函数
+  if (currentDataSource === 'zidahao') {
+    renderZidahaoCharts();
+    return;
+  }
+
   const t = DATA.trend;
   const cc = getChartColors();
   const chartOpts = {
@@ -664,6 +772,173 @@ function renderTrendCharts() {
   }
 }
 
+// ---- 自达号专用图表渲染 ----
+function renderZidahaoCharts() {
+  const z = DATA.zidahao;
+  if (!z) return;
+
+  const t = DATA.trend;
+  const cc = getChartColors();
+  const dates = t.dates;
+  const chartOpts = {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { color: cc.legend, font: { size: 11 }, boxWidth: 12, padding: 14, usePointStyle: true, pointStyle: 'circle' }},
+      tooltip: {
+        backgroundColor: cc.tooltipBg, titleColor: cc.tooltipTitle, bodyColor: cc.tooltipBody,
+        borderColor: cc.tooltipBorder, borderWidth: 1, padding: 10, cornerRadius: 8,
+        callbacks: { label: ctx => ctx.dataset.label + ': ¥' + ctx.parsed.y.toFixed(1) + '万' }
+      }
+    },
+    scales: {
+      x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 } }},
+      y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 }, callback: v => v + '万' }}
+    }
+  };
+
+  // Chart 1: 自达号总业绩趋势
+  const totalCtx = document.getElementById('totalTrendChart').getContext('2d');
+  if (window.__totalChart) window.__totalChart.destroy();
+  window.__totalChart = new Chart(totalCtx, {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          label: '成交金额（自达号）',
+          data: z.daily_gmv,
+          borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.12)',
+          borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6,
+          fill: true, tension: 0.35
+        },
+        {
+          label: '用户支付（自达号）',
+          data: z.daily_paid,
+          borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.06)',
+          borderWidth: 2, pointRadius: 2, fill: true, tension: 0.35
+        },
+        {
+          label: '退款金额（自达号）',
+          data: z.daily_refund,
+          borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)',
+          borderWidth: 2, pointRadius: 2, borderDash: [5,3], fill: true, tension: 0.35
+        }
+      ]
+    },
+    options: chartOpts
+  });
+
+  // Chart 2: 自达号子机构趋势
+  const agencyCtx = document.getElementById('agencyTrendChart').getContext('2d');
+  if (window.__agencyChart) window.__agencyChart.destroy();
+  const subAgencyColors = ['#818cf8','#22c55e','#f59e0b','#ec4899','#14b8a6'];
+  const agencyDatasets = ZDH_SUB_AGENCIES.map((sub, i) => ({
+    label: sub,
+    data: z.daily_by_sub[sub] || [],
+    borderColor: subAgencyColors[i % subAgencyColors.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.35
+  }));
+  window.__agencyFocusMode = false;
+  window.__agencyChart = new Chart(agencyCtx, {
+    type: 'line',
+    data: { labels: dates, datasets: agencyDatasets },
+    options: {
+      ...chartOpts,
+      onClick: function(evt, elements) {
+        const chart = window.__agencyChart;
+        if (!chart) return;
+        if (elements.length === 0) {
+          if (window.__agencyFocusMode) {
+            for (let i = 0; i < chart.data.datasets.length; i++) {
+              chart.getDatasetMeta(i).hidden = false;
+            }
+            window.__agencyFocusMode = false;
+            chart.update();
+          }
+          return;
+        }
+        const clickedIdx = elements[0].datasetIndex;
+        for (let i = 0; i < chart.data.datasets.length; i++) {
+          chart.getDatasetMeta(i).hidden = (i !== clickedIdx);
+        }
+        window.__agencyFocusMode = true;
+        chart.update();
+      },
+      plugins: {
+        ...chartOpts.plugins,
+        legend: {
+          ...chartOpts.plugins.legend,
+          position: 'top',
+          labels: { ...chartOpts.plugins.legend.labels, font: { size: 10 }, padding: 10 },
+          onClick: function(evt, legendItem, legend) {
+            const chart = legend.chart;
+            const clickedIdx = legendItem.datasetIndex;
+            const total = chart.data.datasets.length;
+            if (window.__agencyFocusMode) {
+              for (let i = 0; i < total; i++) {
+                chart.getDatasetMeta(i).hidden = false;
+              }
+              window.__agencyFocusMode = false;
+            } else {
+              for (let i = 0; i < total; i++) {
+                chart.getDatasetMeta(i).hidden = (i !== clickedIdx);
+              }
+              window.__agencyFocusMode = true;
+            }
+            chart.update();
+          }
+        }
+      }
+    }
+  });
+
+  // Chart 3: 自达号子机构占比饼图
+  const pieCtx = document.getElementById('agencyPieChart').getContext('2d');
+  if (window.__agencyPieChart) window.__agencyPieChart.destroy();
+  const pieData = z.pie_data || [];
+  window.__agencyPieChart = new Chart(pieCtx, {
+    type: 'doughnut',
+    data: {
+      labels: pieData.map(p => p.name),
+      datasets: [{
+        data: pieData.map(p => p.value),
+        backgroundColor: pieData.map((_, i) => ZDH_PIE_COLORS[i % ZDH_PIE_COLORS.length]),
+        borderColor: currentTheme === 'light' ? '#ffffff' : '#1a1d27',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: function(evt, elements) {
+        if (!elements || elements.length === 0) return;
+        const idx = elements[0].index;
+        const subName = pieData[idx].name;
+        const subColor = ZDH_PIE_COLORS[idx % ZDH_PIE_COLORS.length];
+        showAgencyDrill(subName, subColor);
+      },
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: cc.legend, font: { size: 11 }, padding: 10, boxWidth: 12 }
+        },
+        tooltip: {
+          backgroundColor: cc.tooltipBg, titleColor: cc.tooltipTitle, bodyColor: cc.tooltipBody,
+          borderColor: cc.tooltipBorder, borderWidth: 1,
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = ((ctx.parsed / total) * 100).toFixed(1);
+              return `${ctx.label}: ¥${ctx.parsed.toFixed(1)}万 (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 function getColType(col) {
   if (!col) return '';
   if (col.includes('GMV') || col.includes('收入') || col.includes('支出') || col.includes('利润') || col.includes('费用') || col.includes('佣金') || col.includes('服务费') || col.includes('投放') || col.includes('金额')) return 'money';
@@ -690,6 +965,71 @@ function endDrag(evt) {
     th.style.borderLeft = '';
     th.style.borderRight = '';
   });
+}
+
+// ---- 列宽拖拽 ----
+let resizeState = null;
+
+function initResize(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const th = e.currentTarget.closest('th');
+  if (!th) return;
+  resizeState = {
+    startX: e.clientX,
+    startWidth: th.offsetWidth,
+    th: th
+  };
+  const handle = th.querySelector('.col-resize-handle');
+  if (handle) handle.classList.add('active');
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', onResizeEnd);
+}
+
+function onResizeMove(e) {
+  if (!resizeState) return;
+  const delta = e.clientX - resizeState.startX;
+  const newWidth = Math.max(50, resizeState.startWidth + delta);
+  resizeState.th.style.width = newWidth + 'px';
+  resizeState.th.style.minWidth = newWidth + 'px';
+}
+
+function onResizeEnd() {
+  if (!resizeState) return;
+  const handle = resizeState.th.querySelector('.col-resize-handle');
+  if (handle) handle.classList.remove('active');
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+  saveColumnWidths();
+  resizeState = null;
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', onResizeEnd);
+}
+
+function saveColumnWidths() {
+  const widths = {};
+  document.querySelectorAll('#anchorHead th').forEach(th => {
+    const col = th.getAttribute('data-col') || '#';
+    widths[col] = th.offsetWidth;
+  });
+  localStorage.setItem('anchorColWidths', JSON.stringify(widths));
+}
+
+function applyColumnWidths() {
+  const saved = localStorage.getItem('anchorColWidths');
+  if (!saved) return;
+  try {
+    const widths = JSON.parse(saved);
+    document.querySelectorAll('#anchorHead th').forEach(th => {
+      const col = th.getAttribute('data-col') || '#';
+      if (widths[col]) {
+        th.style.width = widths[col] + 'px';
+        th.style.minWidth = widths[col] + 'px';
+      }
+    });
+  } catch(e) {}
 }
 
 function dragOver(col, evt) {
@@ -724,18 +1064,21 @@ function dropCol(targetCol, evt) {
 
 function renderAnchorTable() {
   // Header
-  let headHtml = '<th>#</th>';
+  let headHtml = '<th data-col="#"><span>#</span><div class="col-resize-handle" onmousedown="initResize(event)"></div></th>';
   const centerFrom = 2; // 从索引2开始居中对齐（即"开播天数"）
   DISPLAY_COLS.forEach((col, idx) => {
     let isActive = sortCol === col;
     let arrow = isActive ? (sortDir === -1 ? '▼' : '▲') : '▼';
     let alignStyle = idx >= centerFrom ? 'text-align: center;' : '';
-    headHtml += `<th draggable="true" ondragstart="startDrag('${col}', event)" ondragend="endDrag(event)" ondragover="dragOver('${col}', event)" ondrop="dropCol('${col}', event)" onclick="sortBy('${col}')" style="cursor: grab;${alignStyle}">${col}<span class="sort-ind ${isActive ? 'active' : ''}">${arrow}</span></th>`;
+    headHtml += `<th data-col="${col}" draggable="true" ondragstart="startDrag('${col}', event)" ondragend="endDrag(event)" ondragover="dragOver('${col}', event)" ondrop="dropCol('${col}', event)" onclick="sortBy('${col}')" style="cursor: grab;${alignStyle}"><span>${col}</span><span class="sort-ind ${isActive ? 'active' : ''}">${arrow}</span><div class="col-resize-handle" onmousedown="initResize(event)"></div></th>`;
   });
   document.getElementById('anchorHead').innerHTML = headHtml;
+  applyColumnWidths();
 
   // Sort
-  let anchors = [...DATA.anchors];
+  const anchorsSource = (currentDataSource === 'zidahao' && DATA.zidahao)
+    ? DATA.zidahao.anchors : DATA.anchors;
+  let anchors = [...anchorsSource];
   anchors.sort((a, b) => {
     let va, vb;
     if (sortCol === 'ROI') {
@@ -773,7 +1116,7 @@ function renderAnchorTable() {
     });
   }
 
-  const maxGMV = Math.max(...DATA.anchors.map(a => parseFloat(a['直播GMV']) || 0));
+  const maxGMV = Math.max(...anchorsSource.map(a => parseFloat(a['直播GMV']) || 0));
 
   // Body
   let bodyHtml = '';
@@ -821,7 +1164,11 @@ function renderAnchorTable() {
 }
 
 function renderAgencies() {
-  const filtered = (DATA.agencies || []).filter(a => MAIN_AGENCIES.includes(a['机构']));
+  // 根据数据源选择机构列表和过滤条件
+  const sourceList = (currentDataSource === 'zidahao' && DATA.zidahao)
+    ? DATA.zidahao.sub_agencies : DATA.agencies;
+  const filterList = currentDataSource === 'zidahao' ? ZDH_SUB_AGENCIES : MAIN_AGENCIES;
+  const filtered = (sourceList || []).filter(a => filterList.includes(a['机构']));
   const maxAgencyGMV = Math.max(1, ...filtered.map(a => parseFloat(a['直播GMV']) || 0));
   let html = '';
   filtered.forEach(a => {
@@ -854,9 +1201,12 @@ function renderAgencies() {
 }
 
 function populateFilters() {
+  const source = (currentDataSource === 'zidahao' && DATA.zidahao)
+    ? DATA.zidahao.anchors : DATA.anchors;
   const set = new Set();
-  DATA.anchors.forEach(a => { if (a['机构']) set.add(a['机构']); });
+  source.forEach(a => { if (a['机构']) set.add(a['机构']); });
   const sel = document.getElementById('agencyFilter');
+  sel.innerHTML = '<option value="">全部机构</option>';
   [...set].sort().forEach(v => {
     let opt = document.createElement('option');
     opt.value = v; opt.textContent = v;
@@ -994,14 +1344,21 @@ function closeAgencyDrillModal() {
 
 function showAgencyDrill(agencyName, agencyColor) {
   const cc = getChartColors();
-  const top5 = (DATA.trend && DATA.trend.agency_top5_anchors)
-    ? (DATA.trend.agency_top5_anchors[agencyName] || [])
-    : [];
+  // 根据当前数据源选择 Top 5 数据
+  let top5;
+  if (currentDataSource === 'zidahao') {
+    top5 = (DATA.zidahao && DATA.zidahao.top5_by_sub)
+      ? (DATA.zidahao.top5_by_sub[agencyName] || []) : [];
+  } else {
+    top5 = (DATA.trend && DATA.trend.agency_top5_anchors)
+      ? (DATA.trend.agency_top5_anchors[agencyName] || []) : [];
+  }
   if (top5.length === 0) {
     alert(agencyName + ' 暂无 Top 5 达人分天数据');
     return;
   }
-  document.getElementById('agencyDrillTitle').textContent = agencyName + ' · Top 5 达人趋势';
+  const titleSuffix = (currentDataSource === 'zidahao') ? '自达号达人' : '达人';
+  document.getElementById('agencyDrillTitle').textContent = agencyName + ' · Top 5 ' + titleSuffix + '趋势';
   document.getElementById('agencyDrillTitle').style.color = agencyColor;
   document.getElementById('agencyDrillModal').style.display = 'flex';
 
@@ -1095,6 +1452,32 @@ function showAgencyDrill(agencyName, agencyColor) {
       }
     }
   });
+}
+
+function focusPerson(person) {
+  const chart = window.__personChart;
+  if (!chart) return;
+  if (!window.__personFocused) window.__personFocused = 'all';
+
+  // Toggle: clicking same person again → show all
+  const newFocus = (window.__personFocused === person) ? 'all' : person;
+  window.__personFocused = newFocus;
+
+  // Update button styles
+  document.querySelectorAll('.person-btn').forEach(btn => {
+    const isActive = btn.getAttribute('data-person') === newFocus;
+    btn.classList.toggle('active', isActive);
+    btn.style.background = isActive ? 'var(--accent)' : 'transparent';
+    btn.style.color = isActive ? '#fff' : 'var(--text2)';
+  });
+
+  // Show/hide datasets
+  if (newFocus === 'all') {
+    chart.data.datasets.forEach((_, i) => { chart.getDatasetMeta(i).hidden = false; });
+  } else {
+    chart.data.datasets.forEach((ds, i) => { chart.getDatasetMeta(i).hidden = (ds.label !== newFocus); });
+  }
+  chart.update();
 }
 
 function saveNote(douyinId, value) {

@@ -4,10 +4,12 @@
 直接读取上游 Excel 文件，生成 dashboard_data.json
 """
 
-from openpyxl import load_workbook
+import json
+import os
+import subprocess as sp
 from collections import defaultdict
 from datetime import datetime
-import json
+from openpyxl import load_workbook
 
 # 直接读取上游文件
 XLSX_PATH = '/Users/xiaocao/Desktop/蕉下文件/业绩追击/by月业绩/6月业绩/6月业绩追击（纯直播）.xlsx'
@@ -91,6 +93,70 @@ def run():
             '直播GMV占比': ws_anchor.cell(r, 39).value,
         })
 
+    # === 3b. 提取自达号数据（星辞自达号业绩 Sheet）===
+    ws_zdh = wb['星辞自达号业绩']
+    ZDH_SUB_AGENCIES = ['花开自达号', '集米自达号', '太古自达号', '九三自达号', '直属自达号']
+
+    # 3b-a. 自达号达人列表 + sub-org 映射
+    zdh_id_to_sub = {}   # douyin_id -> sub_org_name
+    zdh_anchors = []
+    for r in range(3, ws_zdh.max_row + 1):
+        douyin_id = ws_zdh.cell(r, 2).value
+        if not douyin_id:
+            continue
+        douyin_id_str = str(douyin_id)
+        sub_org = ws_zdh.cell(r, 10).value   # col 10 = 机构（子机构）
+        zdh_id_to_sub[douyin_id_str] = sub_org
+        # 结算率
+        settle_rate = ws_zdh.cell(r, 21).value
+        try:
+            settle_rate = float(settle_rate) if settle_rate is not None else 0
+        except (ValueError, TypeError):
+            settle_rate = 0
+        zdh_anchors.append({
+            '主播昵称': ws_zdh.cell(r, 1).value,
+            '主播抖音号': douyin_id_str,
+            '机构': str(sub_org) if sub_org else '其他',  # 子机构名
+            '开播天数': ws_zdh.cell(r, 11).value or 0,
+            '日均开播时长（小时）': ws_zdh.cell(r, 12).value or 0,
+            '直播GMV': ws_zdh.cell(r, 13).value or 0,
+            '直播退款GMV': ws_zdh.cell(r, 27).value or 0,
+            '直播结算GMV': ws_zdh.cell(r, 20).value or 0,
+            '佣金支出': ws_zdh.cell(r, 22).value or 0,
+            '团长服务费': ws_zdh.cell(r, 23).value or 0,
+            '投放消耗金额': ws_zdh.cell(r, 25).value or 0,
+            '目前结算率': settle_rate,
+            'ROI': ws_zdh.cell(r, 26).value or 0,
+            '直播GMV占比': ws_zdh.cell(r, 28).value,
+        })
+
+    # 3b-b. 自达号整体汇总（row 2）
+    zdh_summary = {
+        '直播GMV': ws_zdh.cell(2, 13).value or 0,
+        '直播结算GMV': ws_zdh.cell(2, 20).value or 0,
+        '消耗金额': ws_zdh.cell(2, 25).value or 0,
+        'ROI': ws_zdh.cell(2, 26).value or 0,
+        '直播退款GMV': ws_zdh.cell(2, 27).value or 0,
+    }
+
+    # 3b-c. 子机构汇总（cols 31-47, rows 3-7）
+    zdh_sub_agencies = []
+    for r in range(3, ws_zdh.max_row + 1):
+        agency_name = ws_zdh.cell(r, 31).value  # col 31 = 机构
+        if not agency_name or str(agency_name).strip() not in ZDH_SUB_AGENCIES:
+            continue
+        zdh_sub_agencies.append({
+            '机构': str(agency_name).strip(),
+            '机构达人数': ws_zdh.cell(r, 32).value or 0,
+            '直播GMV': ws_zdh.cell(r, 33).value or 0,
+            '人均直播GMV': ws_zdh.cell(r, 34).value or 0,
+            '直播退款GMV': ws_zdh.cell(r, 35).value or 0,
+            '直播结算GMV': ws_zdh.cell(r, 36).value or 0,
+            '投放消耗金额': ws_zdh.cell(r, 40).value or 0,
+            'ROI': ws_zdh.cell(r, 42).value or 0,
+            '直播GMV占比': ws_zdh.cell(r, 47).value,
+        })
+
     # === 4. 从 6月直播数据 提取分天趋势 ===
     ws_live = wb['6月直播数据']
     id_to_info = {str(a['主播抖音号']): a for a in anchors}
@@ -103,6 +169,15 @@ def run():
     anchor_daily_gmv = defaultdict(lambda: defaultdict(float))
     anchor_daily_refund = defaultdict(lambda: defaultdict(float))
     anchor_daily_ad_cost = defaultdict(lambda: defaultdict(float))
+
+    # 自达号专属每日累加器
+    zdh_daily_gmv = defaultdict(float)
+    zdh_daily_paid = defaultdict(float)
+    zdh_daily_refund = defaultdict(float)
+    zdh_daily_by_sub = defaultdict(lambda: defaultdict(float))
+    zdh_anchor_daily_gmv = defaultdict(lambda: defaultdict(float))
+    zdh_anchor_daily_paid = defaultdict(lambda: defaultdict(float))
+    zdh_anchor_daily_ad_cost = defaultdict(lambda: defaultdict(float))
 
     for r in range(2, ws_live.max_row + 1):
         douyin_id_raw = ws_live.cell(r, 3).value
@@ -126,6 +201,18 @@ def run():
         anchor_daily_refund[douyin_id][date_key] += refund
         anchor_daily_ad_cost[douyin_id][date_key] += ad_cost
 
+        # 自达号专属累加
+        if douyin_id in zdh_id_to_sub:
+            zdh_daily_gmv[date_key] += gmv
+            zdh_daily_paid[date_key] += paid
+            zdh_daily_refund[date_key] += refund
+            sub_org = zdh_id_to_sub[douyin_id]
+            if sub_org:
+                zdh_daily_by_sub[str(sub_org)][date_key] += gmv
+            zdh_anchor_daily_gmv[douyin_id][date_key] += gmv
+            zdh_anchor_daily_paid[douyin_id][date_key] += paid
+            zdh_anchor_daily_ad_cost[douyin_id][date_key] += ad_cost
+
     # === 5. 整理日期 ===
     all_dates = sorted(daily_total_gmv.keys())
     trend_dates = [d[5:].replace('-', '/') for d in all_dates]
@@ -146,6 +233,21 @@ def run():
             values_wan = [round(daily.get(full, 0) / 10000, 2) for full, _ in date_map.items()]
             top5.append({'name': name, 'douyin_id': douyin_id, 'daily_paid': values_wan})
         agency_top5_anchors[agency] = top5
+
+    # === 6b. 自达号子机构 Top5 达人 ===
+    zdh_id_to_info = {str(a['主播抖音号']): a for a in zdh_anchors}
+    zdh_top5_by_sub = {}
+    for sub_org in ZDH_SUB_AGENCIES:
+        a_list = [(did, info['直播GMV']) for did, info in zdh_id_to_info.items()
+                  if str(info.get('机构', '')).strip() == sub_org]
+        a_list.sort(key=lambda x: x[1], reverse=True)
+        top5 = []
+        for douyin_id, _ in a_list[:5]:
+            name = zdh_id_to_info[douyin_id]['主播昵称']
+            daily_paid = zdh_anchor_daily_paid.get(douyin_id, {})
+            values_wan = [round(daily_paid.get(full, 0) / 10000, 2) for full, _ in date_map.items()]
+            top5.append({'name': str(name), 'douyin_id': douyin_id, 'daily_paid': values_wan})
+        zdh_top5_by_sub[sub_org] = top5
 
     # === 7. 提取 person_daily（久酒/雅宁/星辞）===
     person_sheet_names = ['久酒业绩', '雅宁业绩', '星辞业绩']
@@ -216,7 +318,27 @@ def run():
                 for douyin_id in anchor_daily_gmv
             },
             'agency_top5_anchors': agency_top5_anchors,
-        }
+        },
+        'zidahao': {
+            'summary': zdh_summary,
+            'sub_agencies': zdh_sub_agencies,
+            'anchors': zdh_anchors,
+            'daily_gmv': [round(zdh_daily_gmv[d] / 10000, 2) for d in all_dates],
+            'daily_paid': [round(zdh_daily_paid[d] / 10000, 2) for d in all_dates],
+            'daily_refund': [round(zdh_daily_refund[d] / 10000, 2) for d in all_dates],
+            'daily_by_sub': {
+                sub: [round(zdh_daily_by_sub[sub][d] / 10000, 2) for d in all_dates]
+                for sub in ZDH_SUB_AGENCIES
+            },
+            'pie_data': [
+                {
+                    'name': sub,
+                    'value': round(sum(zdh_daily_by_sub[sub].values()) / 10000, 2)
+                }
+                for sub in ZDH_SUB_AGENCIES
+            ],
+            'top5_by_sub': zdh_top5_by_sub,
+        },
     }
 
     with open(OUTPUT_PATH, 'w', encoding='utf-8') as f:
@@ -227,6 +349,14 @@ def run():
     print(f"  - 达人数量: {len(anchors)}")
     print(f"  - 机构数量: {len(agencies)}")
     print(f"  - 日期范围: {trend_dates[0]} ~ {trend_dates[-1]}")
+    print(f"  - 自达号 GMV: ¥{zdh_summary['直播GMV']:,.2f} ({len(zdh_anchors)} 达人, {len(zdh_sub_agencies)} 子机构)")
+
+    # 自动构建独立看板页面（如果构建脚本存在）
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    build_script = os.path.join(script_dir, 'build_standalone.py')
+    if os.path.exists(build_script):
+        print('')
+        sp.run(['python3', build_script], cwd=script_dir)
 
 if __name__ == '__main__':
     run()
