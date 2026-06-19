@@ -6,6 +6,5 @@ __pycache__/
 # IDE / 编辑器
 .opencode/
 
-# 日志文件
-/tmp/daily_report.log
-/tmp/dashboard_sync.log
+# Playwright MCP 会话残留
+.playwright-mcp/

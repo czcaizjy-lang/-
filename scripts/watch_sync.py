@@ -60,7 +60,6 @@ def git_push():
         # 只添加数据相关文件
         files = [
             'data/dashboard_data.json',
-            'index.html',
             'public/index.html',
         ]
         for f in files:
