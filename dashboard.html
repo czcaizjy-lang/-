@@ -1646,7 +1646,7 @@ function filterPersonDrill(filter) {
   if (filter === 'down') {
     filtered = allRows.filter(function(r) { return r.change < 0; });
   } else if (filter === 'up') {
-    filtered = allRows.filter(function(r) { return r.change > 0; });
+    filtered = allRows.filter(function(r) { return r.change > 0; }).reverse();
   }
 
   // Update button states
