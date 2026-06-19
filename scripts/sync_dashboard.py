@@ -185,7 +185,9 @@ def run():
         gmv = float(ws_live.cell(r, 26).value or 0)
         paid = float(ws_live.cell(r, 27).value or 0)
         refund = float(ws_live.cell(r, 32).value or 0)
-        ad_cost = float(ws_live.cell(r, 44).value or 0)  # 投放消耗(店铺绑定)
+        ad_cost_bind = float(ws_live.cell(r, 44).value or 0)    # 投放消耗(店铺绑定)
+        ad_cost_beitou = float(ws_live.cell(r, 45).value or 0)  # 投放消耗(店铺被投)
+        ad_cost = ad_cost_bind if ad_cost_bind >= ad_cost_beitou else ad_cost_beitou
         if not douyin_id_raw or not dt_val:
             continue
         douyin_id = str(douyin_id_raw)
