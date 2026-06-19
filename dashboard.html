@@ -324,7 +324,7 @@ tbody tr:last-child td { border-bottom: none; }
       <h3 id="agencyDrillTitle" style="margin:0;font-size:16px;"></h3>
       <button onclick="closeAgencyDrillModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;">&times;</button>
     </div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:14px;">Top 5 达人 · 6月1日至今每日支付 GMV</div>
+    <div id="agencyDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:14px;">Top 5 达人 · 6月1日至今每日支付 GMV</div>
     <div style="height:320px;position:relative;"><canvas id="agencyDrillChart"></canvas></div>
   </div>
 </div>
@@ -467,10 +467,10 @@ function renderKPIs() {
         <div class="kpi-value orange">${fmt(adCost, 'money')}</div>
         <div class="kpi-sub">费比 ${total > 0 ? ((adCost/total)*100).toFixed(1) : '0'}%</div>
       </div>
-      <div class="kpi-card">
+      <div class="kpi-card" style="cursor:pointer" onclick="showZidahaoRoiDrill()" title="点击查看各机构每日 ROI 趋势">
         <div class="kpi-label">ROI</div>
         <div class="kpi-value blue">${parseFloat(roi).toFixed(1)}</div>
-        <div class="kpi-sub">GMV / 投放消耗</div>
+        <div class="kpi-sub">GMV / 投放消耗 · 点击看趋势</div>
       </div>
     `;
     document.getElementById('kpiGrid').innerHTML = html;
@@ -1338,6 +1338,151 @@ function showRoiDrill(douyinId, name) {
   });
 }
 
+// ---- 自达号 ROI 趋势下钻（各机构每日 ROI） ----
+function showZidahaoRoiDrill() {
+  const z = DATA.zidahao;
+  if (!z || !z.anchors) return;
+
+  const cc = getChartColors();
+  const roiData = (DATA.trend && DATA.trend.anchor_daily_roi) ? DATA.trend.anchor_daily_roi : {};
+  const dates = DATA.trend ? DATA.trend.dates : [];
+
+  if (dates.length === 0) return;
+
+  // 将自达号达人按子机构分组
+  const subMap = {};  // { subName: [douyinId, ...] }
+  z.anchors.forEach(a => {
+    const sub = a['机构'] || '其他';
+    const douyin = String(a['主播抖音号'] || '');
+    if (!subMap[sub]) subMap[sub] = [];
+    subMap[sub].push(douyin);
+  });
+
+  // 计算每个子机构每天的 ROI（取有数据达人的均值）
+  const subDailyRoi = {};
+  for (const [sub, douyins] of Object.entries(subMap)) {
+    subDailyRoi[sub] = dates.map(d => {
+      let sum = 0, count = 0;
+      douyins.forEach(dy => {
+        const roi = roiData[dy] ? roiData[dy][d] : undefined;
+        if (roi !== undefined && roi !== null && roi > 0) {
+          sum += roi;
+          count++;
+        }
+      });
+      return count > 0 ? sum / count : null;
+    });
+  }
+
+  // 显示弹窗
+  document.getElementById('agencyDrillTitle').textContent = '自达号 · 各机构每日 ROI 趋势';
+  document.getElementById('agencyDrillTitle').style.color = 'var(--text)';
+  document.getElementById('agencyDrillSubtitle').textContent = '按子机构聚合 · 每日 ROI（GMV / 投放消耗）均值';
+  document.getElementById('agencyDrillModal').style.display = 'flex';
+
+  const ctx = document.getElementById('agencyDrillChart').getContext('2d');
+  if (window.__agencyDrillChart) window.__agencyDrillChart.destroy();
+
+  const subColors = ['#818cf8','#22c55e','#f59e0b','#ec4899','#14b8a6'];
+  // 保持与 ZDH_SUB_AGENCIES 一致的顺序
+  const orderedSubs = ZDH_SUB_AGENCIES.filter(s => subDailyRoi[s]);
+  // 追加可能不在预设列表中的子机构
+  for (const sub of Object.keys(subDailyRoi)) {
+    if (!orderedSubs.includes(sub)) orderedSubs.push(sub);
+  }
+
+  const datasets = orderedSubs.map((sub, i) => ({
+    label: sub,
+    data: subDailyRoi[sub],
+    borderColor: subColors[i % subColors.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2.2,
+    pointRadius: 2.5,
+    pointHoverRadius: 6,
+    tension: 0.35,
+    spanGaps: true
+  }));
+
+  window.__agencyDrillFocusMode = false;
+  window.__agencyDrillChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: dates, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      onClick: function(evt, elements) {
+        const chart = window.__agencyDrillChart;
+        if (!chart) return;
+        if (elements.length === 0) {
+          if (window.__agencyDrillFocusMode) {
+            for (let i = 0; i < chart.data.datasets.length; i++) {
+              chart.getDatasetMeta(i).hidden = false;
+            }
+            window.__agencyDrillFocusMode = false;
+            chart.update();
+          }
+          return;
+        }
+        const clickedIdx = elements[0].datasetIndex;
+        for (let i = 0; i < chart.data.datasets.length; i++) {
+          chart.getDatasetMeta(i).hidden = (i !== clickedIdx);
+        }
+        window.__agencyDrillFocusMode = true;
+        chart.update();
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: cc.legend, font: { size: 11 }, padding: 12, boxWidth: 12, usePointStyle: true, pointStyle: 'circle' },
+          onClick: function(evt, legendItem, legend) {
+            const chart = legend.chart;
+            const clickedIdx = legendItem.datasetIndex;
+            const total = chart.data.datasets.length;
+            if (window.__agencyDrillFocusMode) {
+              for (let i = 0; i < total; i++) {
+                chart.getDatasetMeta(i).hidden = false;
+              }
+              window.__agencyDrillFocusMode = false;
+            } else {
+              for (let i = 0; i < total; i++) {
+                chart.getDatasetMeta(i).hidden = (i !== clickedIdx);
+              }
+              window.__agencyDrillFocusMode = true;
+            }
+            chart.update();
+          }
+        },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.tooltipBorder,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              return v !== null && v !== undefined
+                ? ctx.dataset.label + ': ROI ' + v.toFixed(2)
+                : ctx.dataset.label + ': 无数据';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 } } },
+        y: {
+          grid: { color: cc.grid },
+          ticks: { color: cc.tick, font: { size: 10 } },
+          title: { display: true, text: 'ROI', color: cc.tick, font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
 function closeAgencyDrillModal() {
   document.getElementById('agencyDrillModal').style.display = 'none';
 }
@@ -1360,6 +1505,7 @@ function showAgencyDrill(agencyName, agencyColor) {
   const titleSuffix = (currentDataSource === 'zidahao') ? '自达号达人' : '达人';
   document.getElementById('agencyDrillTitle').textContent = agencyName + ' · Top 5 ' + titleSuffix + '趋势';
   document.getElementById('agencyDrillTitle').style.color = agencyColor;
+  document.getElementById('agencyDrillSubtitle').textContent = 'Top 5 达人 · 6月1日至今每日支付 GMV';
   document.getElementById('agencyDrillModal').style.display = 'flex';
 
   const dates = DATA.trend.dates;
