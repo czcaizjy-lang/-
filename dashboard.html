@@ -1339,54 +1339,51 @@ function showRoiDrill(douyinId, name) {
 }
 
 // ---- 自达号 ROI 趋势下钻（各机构每日 ROI） ----
+// 口径：Σ(子机构所有达人当日GMV) / Σ(子机构所有达人当日投放消耗)，加权计算
 function showZidahaoRoiDrill() {
   const z = DATA.zidahao;
-  if (!z || !z.anchors) return;
+  if (!z) return;
 
   const cc = getChartColors();
-  const roiData = (DATA.trend && DATA.trend.anchor_daily_roi) ? DATA.trend.anchor_daily_roi : {};
   const dates = DATA.trend ? DATA.trend.dates : [];
-
   if (dates.length === 0) return;
 
-  // 将自达号达人按子机构分组
-  const subMap = {};  // { subName: [douyinId, ...] }
-  z.anchors.forEach(a => {
-    const sub = a['机构'] || '其他';
-    const douyin = String(a['主播抖音号'] || '');
-    if (!subMap[sub]) subMap[sub] = [];
-    subMap[sub].push(douyin);
-  });
+  // 优先使用后端预计算的加权 ROI（ΣGMV / Σ消耗）
+  let subDailyRoi = z.daily_roi_by_sub || {};
 
-  // 计算每个子机构每天的 ROI（取有数据达人的均值）
-  const subDailyRoi = {};
-  for (const [sub, douyins] of Object.entries(subMap)) {
-    subDailyRoi[sub] = dates.map(d => {
-      let sum = 0, count = 0;
-      douyins.forEach(dy => {
-        const roi = roiData[dy] ? roiData[dy][d] : undefined;
-        if (roi !== undefined && roi !== null && roi > 0) {
-          sum += roi;
-          count++;
-        }
-      });
-      return count > 0 ? sum / count : null;
+  // 兼容：如果后端数据不存在，降级为前端简单平均
+  if (!subDailyRoi || Object.keys(subDailyRoi).length === 0) {
+    const roiData = (DATA.trend && DATA.trend.anchor_daily_roi) ? DATA.trend.anchor_daily_roi : {};
+    const subMap = {};
+    (z.anchors || []).forEach(a => {
+      const sub = a['机构'] || '其他';
+      const douyin = String(a['主播抖音号'] || '');
+      if (!subMap[sub]) subMap[sub] = [];
+      subMap[sub].push(douyin);
     });
+    for (const [sub, douyins] of Object.entries(subMap)) {
+      subDailyRoi[sub] = dates.map(d => {
+        let sum = 0, count = 0;
+        douyins.forEach(dy => {
+          const roi = roiData[dy] ? roiData[dy][d] : undefined;
+          if (roi !== undefined && roi !== null && roi > 0) { sum += roi; count++; }
+        });
+        return count > 0 ? sum / count : null;
+      });
+    }
   }
 
   // 显示弹窗
   document.getElementById('agencyDrillTitle').textContent = '自达号 · 各机构每日 ROI 趋势';
   document.getElementById('agencyDrillTitle').style.color = 'var(--text)';
-  document.getElementById('agencyDrillSubtitle').textContent = '按子机构聚合 · 每日 ROI（GMV / 投放消耗）均值';
+  document.getElementById('agencyDrillSubtitle').textContent = '口径：Σ(机构当日GMV) / Σ(机构当日投放消耗) · 加权计算';
   document.getElementById('agencyDrillModal').style.display = 'flex';
 
   const ctx = document.getElementById('agencyDrillChart').getContext('2d');
   if (window.__agencyDrillChart) window.__agencyDrillChart.destroy();
 
   const subColors = ['#818cf8','#22c55e','#f59e0b','#ec4899','#14b8a6'];
-  // 保持与 ZDH_SUB_AGENCIES 一致的顺序
   const orderedSubs = ZDH_SUB_AGENCIES.filter(s => subDailyRoi[s]);
-  // 追加可能不在预设列表中的子机构
   for (const sub of Object.keys(subDailyRoi)) {
     if (!orderedSubs.includes(sub)) orderedSubs.push(sub);
   }

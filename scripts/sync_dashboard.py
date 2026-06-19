@@ -280,6 +280,22 @@ def run():
         person_daily_gmv[person_name] = gmv_values
         person_daily_refund[person_name] = refund_values
 
+    # === 7b. 自达号子机构每日 ROI（加权：ΣGMV / Σ消耗）===
+    zdh_daily_roi_by_sub = {}
+    zdh_anchor_ids_by_sub = defaultdict(list)
+    for douyin_id, sub in zdh_id_to_sub.items():
+        zdh_anchor_ids_by_sub[sub].append(douyin_id)
+
+    for sub in ZDH_SUB_AGENCIES:
+        anchors_in_sub = zdh_anchor_ids_by_sub.get(sub, [])
+        roi_values = []
+        for full in all_dates:
+            total_gmv = sum(zdh_anchor_daily_gmv.get(aid, {}).get(full, 0) for aid in anchors_in_sub)
+            total_ad = sum(zdh_anchor_daily_ad_cost.get(aid, {}).get(full, 0) for aid in anchors_in_sub)
+            roi = round(total_gmv / total_ad, 2) if total_ad > 0 else None
+            roi_values.append(roi)
+        zdh_daily_roi_by_sub[sub] = roi_values
+
     # === 8. 构建最终 JSON ===
     dashboard_data = {
         'summary': summary,
@@ -338,6 +354,7 @@ def run():
                 for sub in ZDH_SUB_AGENCIES
             ],
             'top5_by_sub': zdh_top5_by_sub,
+            'daily_roi_by_sub': zdh_daily_roi_by_sub,
         },
     }
 
