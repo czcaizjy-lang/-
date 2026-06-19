@@ -215,6 +215,63 @@ def run():
             zdh_anchor_daily_paid[douyin_id][date_key] += paid
             zdh_anchor_daily_ad_cost[douyin_id][date_key] += ad_cost
 
+    # === 4b. 从日数据汇总月度消耗（用 max(绑定,被投) 口径）并回写达人/机构/汇总 ===
+    # 汇总每个达人的月度消耗
+    monthly_ad_by_anchor = {}
+    for douyin_id, daily in anchor_daily_ad_cost.items():
+        monthly_ad_by_anchor[douyin_id] = round(sum(daily.values()), 2)
+
+    # 回写主达人列表的投放消耗金额 + 补充 ROI
+    for a in anchors:
+        douyin = str(a['主播抖音号'])
+        new_ad = monthly_ad_by_anchor.get(douyin, 0)
+        a['投放消耗金额'] = new_ad
+        gmv = float(a.get('直播GMV', 0) or 0)
+        a['ROI'] = round(gmv / new_ad, 2) if new_ad > 0 else 0
+
+    # 回写自达号达人列表
+    zdh_monthly_ad = {}
+    for douyin_id, daily in zdh_anchor_daily_ad_cost.items():
+        zdh_monthly_ad[douyin_id] = round(sum(daily.values()), 2)
+    for a in zdh_anchors:
+        douyin = str(a['主播抖音号'])
+        new_ad = zdh_monthly_ad.get(douyin, 0)
+        a['投放消耗金额'] = new_ad
+        gmv = float(a.get('直播GMV', 0) or 0)
+        a['ROI'] = round(gmv / new_ad, 2) if new_ad > 0 else 0
+
+    # 回写汇总行（所有达人月度消耗之和）
+    total_monthly_ad = sum(monthly_ad_by_anchor.values())
+    summary['投放消耗金额'] = round(total_monthly_ad, 2)
+
+    # 回写机构汇总
+    agency_ad_sum = defaultdict(float)
+    for a in anchors:
+        agency = str(a.get('机构', '') or '')
+        agency_ad_sum[agency] += float(a.get('投放消耗金额', 0) or 0)
+    for ag in agencies:
+        ag_name = str(ag.get('机构', '') or '')
+        new_ad = round(agency_ad_sum.get(ag_name, 0), 2)
+        ag['投放消耗金额'] = new_ad
+
+    # 回写自达号汇总
+    zdh_total_ad = sum(zdh_monthly_ad.values())
+    zdh_summary['消耗金额'] = round(zdh_total_ad, 2)
+    zdh_gmv = float(zdh_summary.get('直播GMV', 0) or 0)
+    zdh_summary['ROI'] = round(zdh_gmv / zdh_total_ad, 2) if zdh_total_ad > 0 else 0
+
+    # 回写自达号子机构汇总
+    zdh_sub_ad_sum = defaultdict(float)
+    for a in zdh_anchors:
+        sub = str(a.get('机构', '') or '')
+        zdh_sub_ad_sum[sub] += float(a.get('投放消耗金额', 0) or 0)
+    for sa in zdh_sub_agencies:
+        sub_name = str(sa.get('机构', '') or '').strip()
+        new_ad = round(zdh_sub_ad_sum.get(sub_name, 0), 2)
+        sa['投放消耗金额'] = new_ad
+        sa_gmv = float(sa.get('直播GMV', 0) or 0)
+        sa['ROI'] = round(sa_gmv / new_ad, 2) if new_ad > 0 else 0
+
     # === 5. 整理日期 ===
     all_dates = sorted(daily_total_gmv.keys())
     trend_dates = [d[5:].replace('-', '/') for d in all_dates]
