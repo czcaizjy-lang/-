@@ -341,15 +341,20 @@ def run():
 
     # === 7c. 构建 person_anchor_detail（人员下探：达人每日支付明细）===
     person_douyin_ids_map = {}
+    person_name_map = {}  # douyin_id → 昵称（从人员 sheet 的 A 列读取）
     for sheet_name in person_sheet_names:
         if sheet_name not in wb.sheetnames:
             continue
         ws = wb[sheet_name]
         douyin_ids = set()
         for r in range(2, ws.max_row + 1):
-            did = ws.cell(r, 2).value
+            did = ws.cell(r, 2).value   # B列 = 抖音号
             if did:
-                douyin_ids.add(str(did))
+                did_str = str(did)
+                douyin_ids.add(did_str)
+                name = ws.cell(r, 1).value  # A列 = 达人昵称
+                if name:
+                    person_name_map[did_str] = str(name)
         if douyin_ids:
             person_name = sheet_name.replace('业绩', '')
             person_douyin_ids_map[person_name] = douyin_ids
@@ -358,8 +363,9 @@ def run():
     for person_name, douyin_ids in person_douyin_ids_map.items():
         anchor_list = []
         for douyin_id in douyin_ids:
+            # 优先用人员 sheet 的昵称 → 星辞业绩的昵称 → 抖音号兜底
             info = id_to_info.get(douyin_id, {})
-            name = info.get('主播昵称') or douyin_id
+            name = person_name_map.get(douyin_id) or info.get('主播昵称') or douyin_id
             daily = anchor_daily_paid.get(douyin_id, {})
             daily_paid_wan = [round(daily.get(full, 0) / 10000, 2) for full in all_dates]
             anchor_list.append({
