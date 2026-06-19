@@ -115,6 +115,21 @@ tbody td {
 }
 tbody tr:hover { background: rgba(99,102,241,0.06); }
 tbody tr:last-child td { border-bottom: none; }
+/* Person drill-down table */
+.person-drill-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.person-drill-table thead th {
+  padding: 8px 12px; background: var(--table-head); color: var(--text2);
+  font-weight: 600; font-size: 11px; text-align: right;
+  border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 1;
+}
+.person-drill-table thead th:first-child { text-align: left; }
+.person-drill-table tbody td {
+  padding: 7px 12px; border-bottom: 1px solid var(--border); text-align: right;
+}
+.person-drill-table tbody td:first-child { text-align: left; font-weight: 500; }
+.person-drill-table tbody tr:hover { background: rgba(99,102,241,0.06); }
+.person-drill-table .drill-up { color: var(--green); }
+.person-drill-table .drill-down { color: var(--red); }
 .rank-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; border-radius: 6px; font-size: 12px; font-weight: 600;
@@ -329,6 +344,25 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<div id="personDrillModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1001;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:16px;padding:24px;width:90%;max-width:800px;max-height:85vh;position:relative;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-shrink:0;">
+      <h3 id="personDrillTitle" style="margin:0;font-size:16px;"></h3>
+      <button onclick="closePersonDrillModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;">&times;</button>
+    </div>
+    <div id="personDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:14px;flex-shrink:0;"></div>
+    <div style="overflow-y:auto;max-height:60vh;flex:1;">
+      <table class="person-drill-table">
+        <thead><tr id="personDrillHead"></tr></thead>
+        <tbody id="personDrillBody"></tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:8px;text-align:center;flex-shrink:0;">
+      按当日较前日变化量排序 · 仅显示变化量 ≥ 0.01万的达人
+    </div>
+  </div>
+</div>
+
 <script>
 let DATA = null;
 let sortCol = '直播GMV';
@@ -390,6 +424,7 @@ function switchDataSource(source) {
   });
   // Close any open drill modal
   document.getElementById('agencyDrillModal').style.display = 'none';
+  document.getElementById('personDrillModal').style.display = 'none';
   // Re-render everything
   render();
 }
@@ -721,7 +756,18 @@ function renderTrendCharts() {
           }
         ]
       },
-      options: chartOpts
+      options: {
+        ...chartOpts,
+        onClick: function(evt, elements) {
+          if (!elements || elements.length === 0) return;
+          const chart = window.__personChart;
+          if (!chart) return;
+          const datasetIdx = elements[0].datasetIndex;
+          const dataIdx = elements[0].index;
+          const personName = chart.data.datasets[datasetIdx].label;
+          showPersonDrill(personName, dataIdx);
+        }
+      }
     });
   }
 
@@ -1478,6 +1524,93 @@ function showZidahaoRoiDrill() {
       }
     }
   });
+}
+
+function showPersonDrill(personName, dateIndex) {
+  const detail = DATA.trend && DATA.trend.person_anchor_detail
+    ? DATA.trend.person_anchor_detail[personName] : null;
+  if (!detail || detail.length === 0) {
+    alert(personName + ' 暂无达人明细数据');
+    return;
+  }
+
+  const dates = DATA.trend.dates;
+  const clickedDate = dates[dateIndex] || '--';
+  const prevDate = dateIndex > 0 ? dates[dateIndex - 1] : null;
+  const personDaily = DATA.trend.person_daily;
+  const todayTotal = personDaily ? (personDaily[personName] ? personDaily[personName][dateIndex] : 0) : 0;
+  const yesterdayTotal = prevDate && personDaily
+    ? (personDaily[personName] ? personDaily[personName][dateIndex - 1] : 0) : 0;
+  const totalChange = prevDate ? (todayTotal - yesterdayTotal) : 0;
+
+  // Build table data
+  var rows = [];
+  for (var i = 0; i < detail.length; i++) {
+    var anchor = detail[i];
+    var todayVal = anchor.daily_paid[dateIndex] || 0;
+    var yesterdayVal = (prevDate && dateIndex > 0)
+      ? (anchor.daily_paid[dateIndex - 1] || 0)
+      : 0;
+    var change = prevDate ? (todayVal - yesterdayVal) : 0;
+    if (Math.abs(change) >= 0.01) {
+      rows.push({
+        name: anchor.name,
+        douyin_id: anchor.douyin_id,
+        today: todayVal,
+        yesterday: yesterdayVal,
+        change: change
+      });
+    }
+  }
+  // Sort by change ascending (biggest drop first)
+  rows.sort(function(a, b) { return a.change - b.change; });
+
+  // Build title
+  var changeArrow = totalChange >= 0 ? '↑' : '↓';
+  var changeCls = totalChange >= 0 ? 'drill-up' : 'drill-down';
+  var changeSign = totalChange >= 0 ? '+' : '';
+  var titleHtml = personName;
+  if (prevDate) {
+    titleHtml += ' · ' + clickedDate + ' 较 ' + prevDate + ' ';
+    titleHtml += '<span class="' + changeCls + '">' + changeArrow + ' ' + changeSign + totalChange.toFixed(2) + '万</span>';
+  } else {
+    titleHtml += ' · ' + clickedDate + '（首日，无前日对比）';
+  }
+  document.getElementById('personDrillTitle').innerHTML = titleHtml;
+  document.getElementById('personDrillSubtitle').textContent =
+    '共 ' + detail.length + ' 位达人，显示变化量 ≥ 0.01万的 ' + rows.length + ' 位';
+
+  // Build table header
+  document.getElementById('personDrillHead').innerHTML =
+    '<th style="width:35%;text-align:left;">达人名称</th>' +
+    '<th style="width:20%;">当日(' + clickedDate + ')</th>' +
+    '<th style="width:20%;">前日(' + (prevDate || '--') + ')</th>' +
+    '<th style="width:25%;">变化量</th>';
+
+  // Build table body
+  var tbodyHtml = '';
+  if (rows.length === 0) {
+    tbodyHtml = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text2);">暂无显著变化（≥ 0.01万）的达人数据</td></tr>';
+  } else {
+    for (var j = 0; j < rows.length; j++) {
+      var row = rows[j];
+      var cls = row.change > 0 ? 'drill-up' : (row.change < 0 ? 'drill-down' : '');
+      var sign = row.change >= 0 ? '+' : '';
+      tbodyHtml +=
+        '<tr>' +
+        '<td style="text-align:left;">' + row.name + '</td>' +
+        '<td>' + row.today.toFixed(2) + '万</td>' +
+        '<td>' + (prevDate ? row.yesterday.toFixed(2) + '万' : '--') + '</td>' +
+        '<td class="' + cls + '">' + sign + row.change.toFixed(2) + '万</td>' +
+        '</tr>';
+    }
+  }
+  document.getElementById('personDrillBody').innerHTML = tbodyHtml;
+  document.getElementById('personDrillModal').style.display = 'flex';
+}
+
+function closePersonDrillModal() {
+  document.getElementById('personDrillModal').style.display = 'none';
 }
 
 function closeAgencyDrillModal() {

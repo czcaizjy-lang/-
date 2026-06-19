@@ -339,6 +339,37 @@ def run():
         person_daily_gmv[person_name] = gmv_values
         person_daily_refund[person_name] = refund_values
 
+    # === 7c. 构建 person_anchor_detail（人员下探：达人每日支付明细）===
+    person_douyin_ids_map = {}
+    for sheet_name in person_sheet_names:
+        if sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        douyin_ids = set()
+        for r in range(2, ws.max_row + 1):
+            did = ws.cell(r, 2).value
+            if did:
+                douyin_ids.add(str(did))
+        if douyin_ids:
+            person_name = sheet_name.replace('业绩', '')
+            person_douyin_ids_map[person_name] = douyin_ids
+
+    person_anchor_detail = {}
+    for person_name, douyin_ids in person_douyin_ids_map.items():
+        anchor_list = []
+        for douyin_id in douyin_ids:
+            info = id_to_info.get(douyin_id, {})
+            name = info.get('主播昵称') or douyin_id
+            daily = anchor_daily_paid.get(douyin_id, {})
+            daily_paid_wan = [round(daily.get(full, 0) / 10000, 2) for full in all_dates]
+            anchor_list.append({
+                'name': str(name),
+                'douyin_id': douyin_id,
+                'daily_paid': daily_paid_wan
+            })
+        anchor_list.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
+        person_anchor_detail[person_name] = anchor_list
+
     # === 7b. 自达号子机构每日 ROI（加权：ΣGMV / Σ消耗）===
     zdh_daily_roi_by_sub = {}
     zdh_anchor_ids_by_sub = defaultdict(list)
@@ -392,6 +423,7 @@ def run():
                 }
                 for douyin_id in anchor_daily_gmv
             },
+            'person_anchor_detail': person_anchor_detail,
             'agency_top5_anchors': agency_top5_anchors,
         },
         'zidahao': {
