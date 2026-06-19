@@ -2,7 +2,7 @@
 """
 构建独立看板 HTML 文件
 读取 dashboard.html（模板）和 dashboard_data.json（数据），
-生成内嵌数据的 standalone_dashboard.html 和 index.html（GitHub Pages 入口）。
+生成内嵌数据的 public/index.html（GitHub Pages 入口）。
 """
 
 import json
@@ -15,8 +15,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'dashboard.html')
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'dashboard_data.json')
 OUTPUT_PATHS = [
-    os.path.join(BASE_DIR, 'standalone_dashboard.html'),
     os.path.join(BASE_DIR, 'index.html'),
+    os.path.join(BASE_DIR, 'public', 'index.html'),
 ]
 
 # ---- fetch 替换文本 ----
