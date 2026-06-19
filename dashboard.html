@@ -130,6 +130,15 @@ tbody tr:last-child td { border-bottom: none; }
 .person-drill-table tbody tr:hover { background: rgba(99,102,241,0.06); }
 .person-drill-table .drill-up { color: var(--green); }
 .person-drill-table .drill-down { color: var(--red); }
+.person-drill-filter-btn {
+  padding: 4px 10px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text2);
+  font-size: 11px; cursor: pointer; transition: all 0.2s;
+}
+.person-drill-filter-btn.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
 .rank-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; border-radius: 6px; font-size: 12px; font-weight: 600;
@@ -350,7 +359,12 @@ tbody tr:last-child td { border-bottom: none; }
       <h3 id="personDrillTitle" style="margin:0;font-size:16px;"></h3>
       <button onclick="closePersonDrillModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;">&times;</button>
     </div>
-    <div id="personDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:14px;flex-shrink:0;"></div>
+    <div id="personDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:12px;flex-shrink:0;"></div>
+    <div id="personDrillFilter" style="display:flex;gap:6px;margin-bottom:12px;flex-shrink:0;display:none;">
+      <button onclick="filterPersonDrill('all')" class="person-drill-filter-btn active" data-filter="all">全部</button>
+      <button onclick="filterPersonDrill('down')" class="person-drill-filter-btn" data-filter="down">↓ 仅下降</button>
+      <button onclick="filterPersonDrill('up')" class="person-drill-filter-btn" data-filter="up">↑ 仅上涨</button>
+    </div>
     <div style="overflow-y:auto;max-height:60vh;flex:1;">
       <table class="person-drill-table">
         <thead><tr id="personDrillHead"></tr></thead>
@@ -1565,6 +1579,11 @@ function showPersonDrill(personName, dateIndex) {
   // Sort by change ascending (biggest drop first)
   rows.sort(function(a, b) { return a.change - b.change; });
 
+  // Store for filter
+  window.__personDrillRows = rows;
+  window.__personDrillPrevDate = prevDate;
+  window.__personDrillClickedDate = clickedDate;
+
   // Build title
   var changeArrow = totalChange >= 0 ? '↑' : '↓';
   var changeCls = totalChange >= 0 ? 'drill-up' : 'drill-down';
@@ -1606,7 +1625,57 @@ function showPersonDrill(personName, dateIndex) {
     }
   }
   document.getElementById('personDrillBody').innerHTML = tbodyHtml;
+
+  // Show filter bar, reset to "全部"
+  var filterBar = document.getElementById('personDrillFilter');
+  filterBar.style.display = 'flex';
+  filterBar.querySelectorAll('button').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+  });
+
   document.getElementById('personDrillModal').style.display = 'flex';
+}
+
+function filterPersonDrill(filter) {
+  var allRows = window.__personDrillRows || [];
+  var prevDate = window.__personDrillPrevDate;
+  var clickedDate = window.__personDrillClickedDate;
+
+  // Filter rows
+  var filtered = allRows;
+  if (filter === 'down') {
+    filtered = allRows.filter(function(r) { return r.change < 0; });
+  } else if (filter === 'up') {
+    filtered = allRows.filter(function(r) { return r.change > 0; });
+  }
+
+  // Update button states
+  document.querySelectorAll('.person-drill-filter-btn').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-filter') === filter);
+  });
+
+  // Rebuild table body
+  var tbodyHtml = '';
+  if (filtered.length === 0) {
+    var label = filter === 'down' ? '下降' : (filter === 'up' ? '上涨' : '显著变化');
+    tbodyHtml = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text2);">暂无' + label + '的达人数据</td></tr>';
+  } else {
+    for (var j = 0; j < filtered.length; j++) {
+      var row = filtered[j];
+      var cls = row.change > 0 ? 'drill-up' : (row.change < 0 ? 'drill-down' : '');
+      var sign = row.change >= 0 ? '+' : '';
+      tbodyHtml +=
+        '<tr>' +
+        '<td style="text-align:left;">' + row.name + '</td>' +
+        '<td>' + row.today.toFixed(2) + '万</td>' +
+        '<td>' + (prevDate ? row.yesterday.toFixed(2) + '万' : '--') + '</td>' +
+        '<td class="' + cls + '">' + sign + row.change.toFixed(2) + '万</td>' +
+        '</tr>';
+    }
+  }
+  document.getElementById('personDrillBody').innerHTML = tbodyHtml;
+  document.getElementById('personDrillSubtitle').textContent =
+    '共 ' + allRows.length + ' 位达人，筛选显示 ' + filtered.length + ' 位';
 }
 
 function closePersonDrillModal() {
