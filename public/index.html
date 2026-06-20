@@ -318,11 +318,6 @@ tbody tr:last-child td { border-bottom: none; }
     <select id="agencyFilter" onchange="filterAnchors()">
       <option value="">全部机构</option>
     </select>
-    <select id="typeFilter" onchange="filterAnchors()">
-      <option value="">全部类型</option>
-      <option value="自达号">自达号</option>
-      <option value="集米文化">集米文化</option>
-    </select>
   </div>
   <div class="table-wrap">
     <table id="anchorTable">
@@ -1200,9 +1195,7 @@ function renderAnchorTable() {
   // Filter
   const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
   const agencyVal = document.getElementById('agencyFilter')?.value || '';
-  const typeVal = document.getElementById('typeFilter')?.value || '';
-
-  if (search || agencyVal || typeVal) {
+  if (search || agencyVal) {
     anchors = anchors.filter(a => {
       let match = true;
       if (search) {
@@ -1210,9 +1203,6 @@ function renderAnchorTable() {
       }
       if (agencyVal) {
         match = match && (a['机构']||'') === agencyVal;
-      }
-      if (typeVal) {
-        match = match && (a['机构']||'') === typeVal;
       }
       return match;
     });
