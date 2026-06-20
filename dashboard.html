@@ -254,9 +254,11 @@ tbody tr:last-child td { border-bottom: none; }
         <span style="font-size:13px;color:var(--text2);">时间进度</span>
         <span style="font-size:13px;font-weight:600;" id="timeProgressPct"></span>
       </div>
-      <div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;position:relative;">
+      <div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;position:relative;cursor:pointer;" id="timeProgressBarWrap"
+           onmouseenter="showExpectedGmv()" onmouseleave="hideExpectedGmv()">
         <div id="timeProgressBar" style="height:100%;border-radius:5px;background:linear-gradient(90deg,#818cf8,#a78bfa);transition:width 0.6s;"></div>
       </div>
+      <div id="expectedGmvTooltip" style="display:none;margin-top:6px;padding:6px 10px;border-radius:6px;background:var(--card);border:1px solid var(--border);font-size:12px;color:var(--text2);text-align:center;"></div>
       <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--text2);">
         <span>6月1日</span><span id="timeNowLabel"></span><span>6月30日</span>
       </div>
@@ -602,6 +604,22 @@ function updateProgress() {
   document.getElementById('gmvProgressPct').style.color = gmvColor;
   document.getElementById('gmvCurrentLabel').textContent = `当前 GMV: ¥${currentGmvWan.toFixed(2)}万`;
   document.getElementById('gmvTargetLabel').textContent = `目标: ¥${targetWan.toFixed(0)}万`;
+
+  // 应达 GMV（时间进度 × 目标）
+  const expectedWan = (timePct / 100) * targetWan;
+  window.__expectedGmvWan = expectedWan;
+}
+
+function showExpectedGmv() {
+  const tooltip = document.getElementById('expectedGmvTooltip');
+  if (!tooltip || window.__expectedGmvWan == null) return;
+  tooltip.innerHTML = `当前时间进度下 <b style="color:var(--accent2);">应达 GMV ≈ ¥${window.__expectedGmvWan.toFixed(2)}万</b>`;
+  tooltip.style.display = '';
+}
+
+function hideExpectedGmv() {
+  const tooltip = document.getElementById('expectedGmvTooltip');
+  if (tooltip) tooltip.style.display = 'none';
 }
 
 function renderTrendCharts() {
