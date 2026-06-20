@@ -1035,6 +1035,8 @@ function getColType(col) {
 }
 
 const DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '目前结算率', 'ROI', '佣金支出', '投放消耗金额'];
+const ZDH_DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '目前结算率', 'ROI', '时均 GMV', '投放消耗金额'];
+function getCols() { return currentDataSource === 'zidahao' ? ZDH_DISPLAY_COLS : DISPLAY_COLS; }
 
 let draggedCol = null;
 
@@ -1128,8 +1130,9 @@ function dragOver(col, evt) {
   });
   const target = evt.currentTarget;
   if (draggedCol && col !== draggedCol) {
-    const draggedIdx = DISPLAY_COLS.indexOf(draggedCol);
-    const targetIdx = DISPLAY_COLS.indexOf(col);
+    const cols = getCols();
+    const draggedIdx = cols.indexOf(draggedCol);
+    const targetIdx = cols.indexOf(col);
     if (draggedIdx < targetIdx) {
       target.style.borderRight = '2px solid #818cf8';
     } else {
@@ -1141,19 +1144,21 @@ function dragOver(col, evt) {
 function dropCol(targetCol, evt) {
   evt.preventDefault();
   if (!draggedCol || draggedCol === targetCol) return;
-  const fromIdx = DISPLAY_COLS.indexOf(draggedCol);
-  const toIdx = DISPLAY_COLS.indexOf(targetCol);
+  const cols = getCols();
+  const fromIdx = cols.indexOf(draggedCol);
+  const toIdx = cols.indexOf(targetCol);
   if (fromIdx === -1 || toIdx === -1) return;
-  DISPLAY_COLS.splice(fromIdx, 1);
-  DISPLAY_COLS.splice(toIdx, 0, draggedCol);
+  cols.splice(fromIdx, 1);
+  cols.splice(toIdx, 0, draggedCol);
   renderAnchorTable();
 }
 
 function renderAnchorTable() {
   // Header
   let headHtml = '<th data-col="#"><span>#</span><div class="col-resize-handle" onmousedown="initResize(event)"></div></th>';
+  const cols = getCols();
   const centerFrom = 2; // 从索引2开始居中对齐（即"开播天数"）
-  DISPLAY_COLS.forEach((col, idx) => {
+  cols.forEach((col, idx) => {
     let isActive = sortCol === col;
     let arrow = isActive ? (sortDir === -1 ? '▼' : '▲') : '▼';
     let alignStyle = idx >= centerFrom ? 'text-align: center;' : '';
@@ -1175,6 +1180,15 @@ function renderAnchorTable() {
       const vbAd = parseFloat(b['投放消耗金额']) || 0;
       va = vaAd > 0 ? vaGmv / vaAd : 0;
       vb = vbAd > 0 ? vbGmv / vbAd : 0;
+    } else if (sortCol === '时均 GMV') {
+      const vaGmv = parseFloat(a['直播GMV']) || 0;
+      const vaDays = parseFloat(a['开播天数']) || 0;
+      const vaHours = parseFloat(a['日均开播时长（小时）']) || 0;
+      const vbGmv = parseFloat(b['直播GMV']) || 0;
+      const vbDays = parseFloat(b['开播天数']) || 0;
+      const vbHours = parseFloat(b['日均开播时长（小时）']) || 0;
+      va = (vaDays > 0 && vaHours > 0) ? (vaGmv / vaDays / vaHours) : 0;
+      vb = (vbDays > 0 && vbHours > 0) ? (vbGmv / vbDays / vbHours) : 0;
     } else {
       va = parseFloat(a[sortCol]) || 0;
       vb = parseFloat(b[sortCol]) || 0;
@@ -1213,7 +1227,7 @@ function renderAnchorTable() {
     const douyinId = a['主播抖音号'] || '';
     bodyHtml += `<tr data-douyin="${douyinId}" data-name="${a['主播昵称'] || ''}">`;
     bodyHtml += `<td><span class="rank-badge ${rankClass}">${rank}</span></td>`;
-    DISPLAY_COLS.forEach((col, colIdx) => {
+    getCols().forEach((col, colIdx) => {
       let val = a[col];
       let type = getColType(col);
       let alignStyle = colIdx >= centerFrom ? 'text-align: center;' : '';
@@ -1241,6 +1255,12 @@ function renderAnchorTable() {
         bodyHtml += `<td style="cursor:pointer; font-size: 15px; font-weight: 600;${alignStyle}" onclick="showRoiDrill('${did}', '${dname}')">${display}</td>`;
       } else if (col === '日均开播时长（小时）') {
         bodyHtml += `<td style="${alignStyle}">${parseFloat(val) ? parseFloat(val).toFixed(1) : '-'}</td>`;
+      } else if (col === '时均 GMV') {
+        const gmv = parseFloat(a['直播GMV']) || 0;
+        const days = parseFloat(a['开播天数']) || 0;
+        const hours = parseFloat(a['日均开播时长（小时）']) || 0;
+        const hourlyGmv = (days > 0 && hours > 0) ? (gmv / days / hours) : 0;
+        bodyHtml += `<td style="${alignStyle}">${hourlyGmv > 0 ? fmt(hourlyGmv, 'money') : '-'}</td>`;
       } else {
         bodyHtml += `<td style="${alignStyle}">${fmt(val, type)}</td>`;
       }
