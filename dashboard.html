@@ -886,7 +886,14 @@ function renderZidahaoCharts() {
         }
       ]
     },
-    options: chartOpts
+    options: {
+      ...chartOpts,
+      onClick: function(evt, elements) {
+        if (!elements || elements.length === 0) return;
+        const dataIdx = elements[0].index;
+        showZidahaoDrill(dataIdx);
+      }
+    }
   });
 
   // Chart 2: 自达号子机构趋势
@@ -1680,6 +1687,103 @@ function filterPersonDrill(filter) {
 
 function closePersonDrillModal() {
   document.getElementById('personDrillModal').style.display = 'none';
+}
+
+// ---- 自达号总业绩趋势下探（达人日环比变化） ----
+function showZidahaoDrill(dateIndex) {
+  var z = DATA.zidahao;
+  if (!z || !z.anchor_detail || z.anchor_detail.length === 0) {
+    alert('暂无自达号达人明细数据');
+    return;
+  }
+
+  var detail = z.anchor_detail;
+  var dates = DATA.trend.dates;
+  var clickedDate = dates[dateIndex] || '--';
+  var prevDate = dateIndex > 0 ? dates[dateIndex - 1] : null;
+
+  // 从图表数据计算总量变化（用户支付）
+  var todayTotal = (z.daily_paid && z.daily_paid[dateIndex] != null) ? z.daily_paid[dateIndex] : 0;
+  var yesterdayTotal = prevDate ? (z.daily_paid && z.daily_paid[dateIndex - 1] != null ? z.daily_paid[dateIndex - 1] : 0) : 0;
+  var totalChange = prevDate ? (todayTotal - yesterdayTotal) : 0;
+
+  // 构建表格数据
+  var rows = [];
+  for (var i = 0; i < detail.length; i++) {
+    var anchor = detail[i];
+    var todayVal = anchor.daily_paid[dateIndex] || 0;
+    var yesterdayVal = (prevDate && dateIndex > 0)
+      ? (anchor.daily_paid[dateIndex - 1] || 0)
+      : 0;
+    var change = prevDate ? (todayVal - yesterdayVal) : 0;
+    if (Math.abs(change) >= 0.01) {
+      rows.push({
+        name: anchor.name,
+        douyin_id: anchor.douyin_id,
+        today: todayVal,
+        yesterday: yesterdayVal,
+        change: change
+      });
+    }
+  }
+  // 按变化量升序（最大掉量排最前）
+  rows.sort(function(a, b) { return a.change - b.change; });
+
+  // 存储供筛选按钮使用
+  window.__personDrillRows = rows;
+  window.__personDrillPrevDate = prevDate;
+  window.__personDrillClickedDate = clickedDate;
+
+  // 标题
+  var changeArrow = totalChange >= 0 ? '↑' : '↓';
+  var changeCls = totalChange >= 0 ? 'drill-up' : 'drill-down';
+  var changeSign = totalChange >= 0 ? '+' : '';
+  var titleHtml = '自达号';
+  if (prevDate) {
+    titleHtml += ' · ' + clickedDate + ' 较 ' + prevDate + ' ';
+    titleHtml += '<span class="' + changeCls + '">' + changeArrow + ' ' + changeSign + totalChange.toFixed(2) + '万</span>';
+  } else {
+    titleHtml += ' · ' + clickedDate + '（首日，无前日对比）';
+  }
+  document.getElementById('personDrillTitle').innerHTML = titleHtml;
+  document.getElementById('personDrillSubtitle').textContent =
+    '共 ' + detail.length + ' 位达人，显示变化量 ≥ 0.01万的 ' + rows.length + ' 位';
+
+  // 表头
+  document.getElementById('personDrillHead').innerHTML =
+    '<th style="width:35%;text-align:left;">达人名称</th>' +
+    '<th style="width:20%;">当日(' + clickedDate + ')</th>' +
+    '<th style="width:20%;">前日(' + (prevDate || '--') + ')</th>' +
+    '<th style="width:25%;">变化量</th>';
+
+  // 表体
+  var tbodyHtml = '';
+  if (rows.length === 0) {
+    tbodyHtml = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text2);">暂无显著变化（≥ 0.01万）的达人数据</td></tr>';
+  } else {
+    for (var j = 0; j < rows.length; j++) {
+      var row = rows[j];
+      var cls = row.change > 0 ? 'drill-up' : (row.change < 0 ? 'drill-down' : '');
+      var sign = row.change >= 0 ? '+' : '';
+      tbodyHtml +=
+        '<tr>' +
+        '<td style="text-align:left;">' + row.name + '</td>' +
+        '<td>' + row.today.toFixed(2) + '万</td>' +
+        '<td>' + (prevDate ? row.yesterday.toFixed(2) + '万' : '--') + '</td>' +
+        '<td class="' + cls + '">' + sign + row.change.toFixed(2) + '万</td>' +
+        '</tr>';
+    }
+  }
+  document.getElementById('personDrillBody').innerHTML = tbodyHtml;
+
+  // 显示筛选栏，默认"全部"
+  var filterBar = document.getElementById('personDrillFilter');
+  filterBar.style.display = 'flex';
+  filterBar.querySelectorAll('button').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+  });
+
+  document.getElementById('personDrillModal').style.display = 'flex';
 }
 
 function closeAgencyDrillModal() {

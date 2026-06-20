@@ -376,6 +376,19 @@ def run():
         anchor_list.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
         person_anchor_detail[person_name] = anchor_list
 
+    # === 7d. 构建 zdh_anchor_detail（自达号下探：达人每日支付明细）===
+    zdh_anchor_detail = []
+    for a in zdh_anchors:
+        douyin_id = str(a['主播抖音号'])
+        daily = anchor_daily_paid.get(douyin_id, {})
+        daily_paid_wan = [round(daily.get(full, 0) / 10000, 2) for full in all_dates]
+        zdh_anchor_detail.append({
+            'name': str(a.get('主播昵称') or douyin_id),
+            'douyin_id': douyin_id,
+            'daily_paid': daily_paid_wan
+        })
+    zdh_anchor_detail.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
+
     # === 7b. 自达号子机构每日 ROI（加权：ΣGMV / Σ消耗）===
     zdh_daily_roi_by_sub = {}
     zdh_anchor_ids_by_sub = defaultdict(list)
@@ -452,6 +465,7 @@ def run():
             ],
             'top5_by_sub': zdh_top5_by_sub,
             'daily_roi_by_sub': zdh_daily_roi_by_sub,
+            'anchor_detail': zdh_anchor_detail,
         },
     }
 
