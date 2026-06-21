@@ -187,7 +187,8 @@ def run():
         refund = float(ws_live.cell(r, 32).value or 0)
         ad_cost_bind = float(ws_live.cell(r, 44).value or 0)    # 投放消耗(店铺绑定)
         ad_cost_beitou = float(ws_live.cell(r, 45).value or 0)  # 投放消耗(店铺被投)
-        ad_cost = ad_cost_bind if ad_cost_bind >= ad_cost_beitou else ad_cost_beitou
+        # 优先使用被投消耗，为 0 时回退到绑定消耗（兼容数据未录入场景）
+        ad_cost = ad_cost_beitou if ad_cost_beitou > 0 else ad_cost_bind
         if not douyin_id_raw or not dt_val:
             continue
         douyin_id = str(douyin_id_raw)
@@ -201,7 +202,7 @@ def run():
         anchor_daily_paid[douyin_id][date_key] += paid
         anchor_daily_gmv[douyin_id][date_key] += gmv
         anchor_daily_refund[douyin_id][date_key] += refund
-        anchor_daily_ad_cost[douyin_id][date_key] += ad_cost
+        anchor_daily_ad_cost[douyin_id][date_key] += ad_cost if gmv > 0 else 0
 
         # 自达号专属累加
         if douyin_id in zdh_id_to_sub:
@@ -213,7 +214,7 @@ def run():
                 zdh_daily_by_sub[str(sub_org)][date_key] += gmv
             zdh_anchor_daily_gmv[douyin_id][date_key] += gmv
             zdh_anchor_daily_paid[douyin_id][date_key] += paid
-            zdh_anchor_daily_ad_cost[douyin_id][date_key] += ad_cost
+            zdh_anchor_daily_ad_cost[douyin_id][date_key] += ad_cost if gmv > 0 else 0
 
     # === 4b. 从日数据汇总月度消耗（用 max(绑定,被投) 口径）并回写达人/机构/汇总 ===
     # 汇总每个达人的月度消耗
