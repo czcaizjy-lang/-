@@ -476,6 +476,22 @@ function fmt(v, type) {
   return v;
 }
 
+function currentMonthLabel() {
+  // 从趋势日期中提取月份信息
+  var dates = DATA.trend && DATA.trend.dates;
+  if (dates && dates.length > 0) {
+    var lastDate = dates[dates.length - 1];
+    var parts = lastDate.split('/');
+    if (parts.length >= 2) return parts[0] + '月';
+  }
+  return '';
+}
+
+function trendLastIndex() {
+  var dates = DATA.trend && DATA.trend.dates;
+  return dates ? dates.length - 1 : 0;
+}
+
 function render() {
   if (!DATA) return;
   document.getElementById('updateTime').textContent = new Date().toLocaleString('zh-CN');
@@ -532,26 +548,22 @@ function renderKPIs() {
   const total = s['直播GMV'] || 0;
   const settled = s['直播结算GMV'] || 0;
   const refund = s['直播退款GMV'] || 0;
-  const predicted = s['预测税后收入'] || 0;
-  const rate = s['目前结算率'] || 0;
-  const achieved = s['当前收入达成率'] || 0;
-  const commission = (s['佣金支出']||0) + (s['团长服务费']||0) + (s['投放消耗金额']||0);
 
   const html = `
     <div class="kpi-card">
       <div class="kpi-label">总直播GMV</div>
       <div class="kpi-value">${fmt(total, 'money')}</div>
-      <div class="kpi-sub">${DATA.anchors.length} 位达人</div>
+      <div class="kpi-sub">${DATA.anchors.length} 位达人 · ${currentMonthLabel()}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">直播结算GMV</div>
       <div class="kpi-value green">${fmt(settled, 'money')}</div>
-      <div class="kpi-sub">结算率 ${fmt(rate, 'pct')}</div>
+      <div class="kpi-sub">结算率 ${total > 0 ? ((settled/total)*100).toFixed(1) : '0'}%</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card" style="cursor:pointer" onclick="showOverallDrill(trendLastIndex())" title="点击查看全部达人当日 vs 前日变化">
       <div class="kpi-label">退款GMV</div>
       <div class="kpi-value red">${fmt(refund, 'money')}</div>
-      <div class="kpi-sub">退款率 ${((refund/total)*100).toFixed(1)}%</div>
+      <div class="kpi-sub">退款率 ${total > 0 ? ((refund/total)*100).toFixed(1) : '0'}% · 点击下探</div>
     </div>
   `;
   document.getElementById('kpiGrid').innerHTML = html;
@@ -651,7 +663,9 @@ function renderTrendCharts() {
       }
     },
     scales: {
-      x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 } }},
+      x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 },
+        callback: function(val, index, ticks) { return index % Math.max(1, Math.ceil(ticks.length / 6)) === 0 || index === ticks.length - 1 ? this.getLabelForValue(val) : ''; }
+      }},
       y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 }, callback: v => v + '万' }}
     }
   };
@@ -791,6 +805,14 @@ function renderTrendCharts() {
             borderColor: '#f59e0b',
             backgroundColor: 'transparent',
             borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 6, tension: 0.35
+          },
+          {
+            label: '其他',
+            data: pd['其他'] || [],
+            borderColor: '#9ca3af',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5, pointRadius: 1.5, pointHoverRadius: 4, tension: 0.35,
+            borderDash: [4, 3]
           }
         ]
       },
@@ -803,6 +825,7 @@ function renderTrendCharts() {
           const datasetIdx = elements[0].datasetIndex;
           const dataIdx = elements[0].index;
           const personName = chart.data.datasets[datasetIdx].label;
+          if (personName === '其他') return; // 其他无下探
           showPersonDrill(personName, dataIdx);
         }
       }
@@ -876,7 +899,9 @@ function renderZidahaoCharts() {
       }
     },
     scales: {
-      x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 } }},
+      x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 },
+        callback: function(val, index, ticks) { return index % Math.max(1, Math.ceil(ticks.length / 6)) === 0 || index === ticks.length - 1 ? this.getLabelForValue(val) : ''; }
+      }},
       y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 }, callback: v => v + '万' }}
     }
   };
@@ -1038,8 +1063,8 @@ function getColType(col) {
   return '';
 }
 
-const DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '目前结算率', 'ROI', '佣金支出', '投放消耗金额'];
-const ZDH_DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '目前结算率', 'ROI', '时均 GMV', '投放消耗金额'];
+const DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额'];
+const ZDH_DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额'];
 function getCols() { return currentDataSource === 'zidahao' ? ZDH_DISPLAY_COLS : DISPLAY_COLS; }
 
 let draggedCol = null;
@@ -1233,14 +1258,14 @@ function renderAnchorTable() {
       if (col === '主播昵称') {
         const douyinId = a['主播抖音号'] || '';
         const storedNote = localStorage.getItem('note_' + douyinId);
-        const note = storedNote !== null ? storedNote : (a['达人备注'] || '');
+        const note = storedNote !== null ? storedNote : '';
         bodyHtml += `<td><div style="font-weight:500">${val || '-'}</div><input type="text" value="${(note||'').replace(/"/g, '&quot;')}" placeholder="添加备注..." onchange="saveNote('${douyinId}', this.value)" style="width:100%;margin-top:3px;padding:2px 4px;border-radius:4px;border:1px solid transparent;background:transparent;color:var(--text2);font-size:11px;outline:none;" onfocus="this.style.borderColor='var(--accent)';this.style.background='var(--bg)'" onblur="this.style.borderColor='transparent';this.style.background='transparent'"></td>`;
       } else if (col === '直播GMV' && val && maxGMV > 0) {
         let pct = ((parseFloat(val)/maxGMV)*100).toFixed(0);
         const did = String(douyinId).replace(/'/g, "\\'");
         const dname = String(a['主播昵称'] || '').replace(/'/g, "\\'");
         bodyHtml += `<td class="bar-cell" style="cursor:pointer;${alignStyle}" onclick="showDrillDown('${did}', '${dname}')"><span style="position:relative;z-index:1;font-weight:500;">${fmt(val, type)}</span><div class="bar-bg" style="width:${pct}%"></div></td>`;
-      } else if (col === '目前结算率') {
+      } else if (col === '结算率') {
         let num = parseFloat(val);
         let cls = num >= 0.4 ? 'tag-green' : num >= 0.2 ? 'tag-orange' : 'tag-red';
         bodyHtml += `<td style="${alignStyle}"><span class="tag ${cls}" style="font-size: 15px; font-weight: 600;">${fmt(val, 'pct')}</span></td>`;
@@ -1284,12 +1309,11 @@ function renderAgencies() {
     let avgGMV = a['人均直播GMV'] || 0;
     let refund = a['直播退款GMV'] || 0;
     let settled = a['直播结算GMV'] || 0;
-    // 预估结算率 = 结算GMV / 直播GMV（前端实时计算，不依赖上游）
+    // 结算率 = 结算GMV / 直播GMV（前端实时计算）
     let rate = gmv > 0 ? (parseFloat(settled) / parseFloat(gmv)) : 0;
     let commission = a['佣金支出'] || 0;
-    let service = a['团长服务费'] || 0;
     let ad = a['投放消耗金额'] || 0;
-    let totalCost = (parseFloat(commission)||0) + (parseFloat(service)||0) + (parseFloat(ad)||0);
+    let totalCost = (parseFloat(commission)||0) + (parseFloat(ad)||0);
     // 自达号：机构ROI = 直播GMV / 消耗金额（消耗为0时显示 -）
     let agencyRoi = (currentDataSource === 'zidahao' && ad > 0) ? (parseFloat(gmv) / parseFloat(ad)) : null;
     let pct = maxAgencyGMV > 0 ? ((parseFloat(gmv)/maxAgencyGMV)*100).toFixed(0) : 0;
@@ -1301,7 +1325,7 @@ function renderAgencies() {
       <div class="agency-row"><span class="label">直播GMV</span><span class="value" style="color:var(--accent2)">¥${(parseFloat(gmv)/10000).toFixed(1)}万</span></div>
       <div class="agency-row"><span class="label">人均GMV</span><span class="value">¥${(parseFloat(avgGMV)/10000).toFixed(1)}万</span></div>
       <div class="agency-row"><span class="label">结算GMV</span><span class="value">¥${(parseFloat(settled)/10000).toFixed(1)}万</span></div>
-      <div class="agency-row"><span class="label">预估结算率</span><span class="value"><span class="tag ${rate >= 0.4 ? 'tag-green' : rate >= 0.2 ? 'tag-orange' : 'tag-red'}">${(parseFloat(rate)*100).toFixed(1)}%</span></span></div>
+      <div class="agency-row"><span class="label">结算率</span><span class="value"><span class="tag ${rate >= 0.4 ? 'tag-green' : rate >= 0.2 ? 'tag-orange' : 'tag-red'}">${(parseFloat(rate)*100).toFixed(1)}%</span></span></div>
       ${currentDataSource === 'zidahao'
         ? '<div class="agency-row"><span class="label">机构ROI</span><span class="value">' + (agencyRoi !== null ? agencyRoi.toFixed(2) : '-') + '</span></div>'
         : '<div class="agency-row"><span class="label">总费用</span><span class="value">¥' + (totalCost/10000).toFixed(1) + '万</span></div>'}
