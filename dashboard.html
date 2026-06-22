@@ -515,14 +515,20 @@ function renderKPIs() {
     if (!z || !z.summary) return;
     const s = z.summary;
     const total = s['直播GMV'] || 0;
+    const paid = s['直播支付GMV'] || 0;
     const settled = s['直播结算GMV'] || 0;
     const adCost = s['消耗金额'] || 0;
     const roi = s['ROI'] || 0;
     const html = `
       <div class="kpi-card">
-        <div class="kpi-label">总直播GMV（自达号）</div>
+        <div class="kpi-label">直播总成交金额（自达号）</div>
         <div class="kpi-value">${fmt(total, 'money')}</div>
         <div class="kpi-sub">${z.anchors ? z.anchors.length : 0} 位达人</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">直播支付GMV</div>
+        <div class="kpi-value green">${fmt(paid, 'money')}</div>
+        <div class="kpi-sub">支付率 ${total > 0 ? ((paid/total)*100).toFixed(1) : '0'}%</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">直播结算GMV</div>
@@ -546,14 +552,20 @@ function renderKPIs() {
 
   const s = DATA.summary;
   const total = s['直播GMV'] || 0;
+  const paid = s['直播支付GMV'] || 0;
   const settled = s['直播结算GMV'] || 0;
   const refund = s['直播退款GMV'] || 0;
 
   const html = `
     <div class="kpi-card">
-      <div class="kpi-label">总直播GMV</div>
+      <div class="kpi-label">直播总成交金额</div>
       <div class="kpi-value">${fmt(total, 'money')}</div>
       <div class="kpi-sub">${DATA.anchors.length} 位达人 · ${currentMonthLabel()}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">直播支付GMV</div>
+      <div class="kpi-value green">${fmt(paid, 'money')}</div>
+      <div class="kpi-sub">支付率 ${total > 0 ? ((paid/total)*100).toFixed(1) : '0'}%</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">直播结算GMV</div>
@@ -1063,8 +1075,16 @@ function getColType(col) {
   return '';
 }
 
-const DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额'];
-const ZDH_DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额'];
+const DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播支付GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额'];
+const ZDH_DISPLAY_COLS = ['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播支付GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额'];
+
+// 列显示名映射（字段名 → 表头显示名）
+const COL_LABELS = {
+  '直播GMV': '直播总成交金额',
+  '直播支付GMV': '直播支付GMV',
+};
+function colLabel(col) { return COL_LABELS[col] || col; }
+
 function getCols() { return currentDataSource === 'zidahao' ? ZDH_DISPLAY_COLS : DISPLAY_COLS; }
 
 let draggedCol = null;
@@ -1191,7 +1211,7 @@ function renderAnchorTable() {
     let isActive = sortCol === col;
     let arrow = isActive ? (sortDir === -1 ? '▼' : '▲') : '▼';
     let alignStyle = idx >= centerFrom ? 'text-align: center;' : '';
-    headHtml += `<th data-col="${col}" draggable="true" ondragstart="startDrag('${col}', event)" ondragend="endDrag(event)" ondragover="dragOver('${col}', event)" ondrop="dropCol('${col}', event)" onclick="sortBy('${col}')" style="cursor: grab;${alignStyle}"><span>${col}</span><span class="sort-ind ${isActive ? 'active' : ''}">${arrow}</span><div class="col-resize-handle" onmousedown="initResize(event)"></div></th>`;
+    headHtml += `<th data-col="${col}" draggable="true" ondragstart="startDrag('${col}', event)" ondragend="endDrag(event)" ondragover="dragOver('${col}', event)" ondrop="dropCol('${col}', event)" onclick="sortBy('${col}')" style="cursor: grab;${alignStyle}"><span>${colLabel(col)}</span><span class="sort-ind ${isActive ? 'active' : ''}">${arrow}</span><div class="col-resize-handle" onmousedown="initResize(event)"></div></th>`;
   });
   document.getElementById('anchorHead').innerHTML = headHtml;
   applyColumnWidths();

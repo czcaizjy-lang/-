@@ -177,6 +177,7 @@ def run():
             '开播天数': active_days,
             '日均开播时长（小时）': round(duration_total / 60 / active_days, 1) if active_days > 0 else 0,
             '直播GMV': gmv_val,
+            '直播支付GMV': paid_val,
             '直播退款GMV': refund_val,
             '直播结算GMV': settle_val,
             '结算率': round(settle_val / gmv_val, 4) if gmv_val > 0 else 0,
@@ -205,6 +206,7 @@ def run():
             '开播天数': active_days,
             '日均开播时长（小时）': round(duration_total / 60 / active_days, 1) if active_days > 0 else 0,
             '直播GMV': gmv_val,
+            '直播支付GMV': paid_val,
             '直播退款GMV': refund_val,
             '直播结算GMV': settle_val,
             '结算率': round(settle_val / gmv_val, 4) if gmv_val > 0 else 0,
@@ -226,6 +228,7 @@ def run():
     summary = {
         '主播昵称': '汇总',
         '直播GMV': round(total_gmv, 2),
+        '直播支付GMV': round(total_paid, 2),
         '直播退款GMV': round(total_refund, 2),
         '直播结算GMV': total_settle,
         '结算率': round(total_settle / total_gmv, 4) if total_gmv > 0 else 0,
@@ -242,6 +245,7 @@ def run():
 
     zdh_summary = {
         '直播GMV': round(zdh_total_gmv, 2),
+        '直播支付GMV': round(zdh_total_paid, 2),
         '直播退款GMV': round(zdh_total_refund, 2),
         '直播结算GMV': zdh_total_settle,
         '结算率': round(zdh_total_settle / zdh_total_gmv, 4) if zdh_total_gmv > 0 else 0,
