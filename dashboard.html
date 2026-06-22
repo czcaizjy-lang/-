@@ -389,6 +389,39 @@ let currentDataSource = 'all';  // 'all' | 'zidahao'
 const ZDH_SUB_AGENCIES = ['花开自达号', '集米自达号', '太古自达号', '九三自达号', '直属自达号'];
 const ZDH_PIE_COLORS = ['#818cf8','#22c55e','#f59e0b','#ec4899','#14b8a6'];
 
+// 月份交界虚线插件：在跨月位置画垂直虚线
+Chart.register({
+  id: 'monthBoundaryLine',
+  afterDraw: function(chart) {
+    var labels = chart.data.labels;
+    if (!labels || labels.length < 2) return;
+    var firstMonth = labels[0].split('/')[0];
+    var boundaryIdx = -1;
+    for (var i = 1; i < labels.length; i++) {
+      if (labels[i].split('/')[0] !== firstMonth) {
+        boundaryIdx = i;
+        break;
+      }
+    }
+    if (boundaryIdx < 0) return;
+    var xScale = chart.scales.x;
+    var yScale = chart.scales.y;
+    if (!xScale || !yScale) return;
+    // 画在旧月最后一天和新月第一天之间
+    var x = xScale.getPixelForValue(boundaryIdx - 0.5);
+    var ctx = chart.ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = currentTheme === 'light' ? '#b0b0b8' : '#6b7280';
+    ctx.lineWidth = 1;
+    ctx.moveTo(x, yScale.top);
+    ctx.lineTo(x, yScale.bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+});
+
 // 根据当前主题返回 Chart.js 需要的颜色
 function getChartColors() {
   if (currentTheme === 'light') {
@@ -676,7 +709,17 @@ function renderTrendCharts() {
     },
     scales: {
       x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 },
-        callback: function(val, index, ticks) { return index % Math.max(1, Math.ceil(ticks.length / 6)) === 0 || index === ticks.length - 1 ? this.getLabelForValue(val) : ''; }
+        callback: function(val, index, ticks) {
+          var label = this.getLabelForValue(val);
+          // 月份交界首日始终显示
+          if (index > 0 && ticks[index - 1]) {
+            var prevLabel = this.getLabelForValue(ticks[index - 1].value);
+            if (prevLabel && label && label.split('/')[0] !== prevLabel.split('/')[0]) return label;
+          }
+          var step = Math.max(1, Math.ceil(ticks.length / 6));
+          if (index % step === 0 || index === ticks.length - 1) return label;
+          return '';
+        }
       }},
       y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 }, callback: v => v + '万' }}
     }
@@ -912,7 +955,17 @@ function renderZidahaoCharts() {
     },
     scales: {
       x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 },
-        callback: function(val, index, ticks) { return index % Math.max(1, Math.ceil(ticks.length / 6)) === 0 || index === ticks.length - 1 ? this.getLabelForValue(val) : ''; }
+        callback: function(val, index, ticks) {
+          var label = this.getLabelForValue(val);
+          // 月份交界首日始终显示
+          if (index > 0 && ticks[index - 1]) {
+            var prevLabel = this.getLabelForValue(ticks[index - 1].value);
+            if (prevLabel && label && label.split('/')[0] !== prevLabel.split('/')[0]) return label;
+          }
+          var step = Math.max(1, Math.ceil(ticks.length / 6));
+          if (index % step === 0 || index === ticks.length - 1) return label;
+          return '';
+        }
       }},
       y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 }, callback: v => v + '万' }}
     }
