@@ -682,7 +682,13 @@ function renderTrendCharts() {
         }
       ]
     },
-    options: chartOpts
+    options: {
+      ...chartOpts,
+      onClick: function(evt, elements) {
+        if (!elements || elements.length === 0) return;
+        showOverallDrill(elements[0].index);
+      }
+    }
   });
 
   // Agency trend chart - filter out '其他'
@@ -1717,6 +1723,100 @@ function filterPersonDrill(filter) {
 
 function closePersonDrillModal() {
   document.getElementById('personDrillModal').style.display = 'none';
+}
+
+// ---- 每日总业绩趋势下探（全部达人日环比变化） ----
+function showOverallDrill(dateIndex) {
+  var allAnchors = DATA.trend && DATA.trend.all_anchor_daily;
+  if (!allAnchors || allAnchors.length === 0) {
+    alert('暂无达人明细数据');
+    return;
+  }
+
+  var dates = DATA.trend.dates;
+  var clickedDate = dates[dateIndex] || '--';
+  var prevDate = dateIndex > 0 ? dates[dateIndex - 1] : null;
+  var todayTotal = DATA.trend.daily_total_paid[dateIndex] || 0;
+  var yesterdayTotal = prevDate ? (DATA.trend.daily_total_paid[dateIndex - 1] || 0) : 0;
+  var totalChange = prevDate ? (todayTotal - yesterdayTotal) : 0;
+
+  // Build table data
+  var rows = [];
+  for (var i = 0; i < allAnchors.length; i++) {
+    var anchor = allAnchors[i];
+    var todayVal = anchor.daily_paid[dateIndex] || 0;
+    var yesterdayVal = (prevDate && dateIndex > 0)
+      ? (anchor.daily_paid[dateIndex - 1] || 0)
+      : 0;
+    var change = prevDate ? (todayVal - yesterdayVal) : 0;
+    if (Math.abs(change) >= 0.01) {
+      rows.push({
+        name: anchor.name,
+        douyin_id: anchor.douyin_id,
+        today: todayVal,
+        yesterday: yesterdayVal,
+        change: change
+      });
+    }
+  }
+  // Sort by change ascending (biggest drop first)
+  rows.sort(function(a, b) { return a.change - b.change; });
+
+  // Store for filter
+  window.__personDrillRows = rows;
+  window.__personDrillPrevDate = prevDate;
+  window.__personDrillClickedDate = clickedDate;
+
+  // Build title
+  var changeArrow = totalChange >= 0 ? '↑' : '↓';
+  var changeCls = totalChange >= 0 ? 'drill-up' : 'drill-down';
+  var changeSign = totalChange >= 0 ? '+' : '';
+  var titleHtml = '全部达人';
+  if (prevDate) {
+    titleHtml += ' · ' + clickedDate + ' 较 ' + prevDate + ' ';
+    titleHtml += '<span class="' + changeCls + '">' + changeArrow + ' ' + changeSign + totalChange.toFixed(2) + '万</span>';
+  } else {
+    titleHtml += ' · ' + clickedDate + '（首日，无前日对比）';
+  }
+  document.getElementById('personDrillTitle').innerHTML = titleHtml;
+  document.getElementById('personDrillSubtitle').textContent =
+    '共 ' + allAnchors.length + ' 位达人，显示变化量 ≥ 0.01万的 ' + rows.length + ' 位';
+
+  // Build table header
+  document.getElementById('personDrillHead').innerHTML =
+    '<th style="width:35%;text-align:left;">达人名称</th>' +
+    '<th style="width:20%;">当日(' + clickedDate + ')</th>' +
+    '<th style="width:20%;">前日(' + (prevDate || '--') + ')</th>' +
+    '<th style="width:25%;">变化量</th>';
+
+  // Build table body
+  var tbodyHtml = '';
+  if (rows.length === 0) {
+    tbodyHtml = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text2);">暂无显著变化（≥ 0.01万）的达人数据</td></tr>';
+  } else {
+    for (var j = 0; j < rows.length; j++) {
+      var row = rows[j];
+      var cls = row.change > 0 ? 'drill-up' : (row.change < 0 ? 'drill-down' : '');
+      var sign = row.change >= 0 ? '+' : '';
+      tbodyHtml +=
+        '<tr>' +
+        '<td style="text-align:left;">' + row.name + '</td>' +
+        '<td>' + row.today.toFixed(2) + '万</td>' +
+        '<td>' + (prevDate ? row.yesterday.toFixed(2) + '万' : '--') + '</td>' +
+        '<td class="' + cls + '">' + sign + row.change.toFixed(2) + '万</td>' +
+        '</tr>';
+    }
+  }
+  document.getElementById('personDrillBody').innerHTML = tbodyHtml;
+
+  // Show filter bar, reset to "全部"
+  var filterBar = document.getElementById('personDrillFilter');
+  filterBar.style.display = 'flex';
+  filterBar.querySelectorAll('button').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+  });
+
+  document.getElementById('personDrillModal').style.display = 'flex';
 }
 
 // ---- 自达号总业绩趋势下探（达人日环比变化） ----

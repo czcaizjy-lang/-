@@ -390,6 +390,19 @@ def run():
         })
     zdh_anchor_detail.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
 
+    # === 7d2. 构建 all_anchor_daily（全部达人每日支付明细，用于整体趋势下探）===
+    all_anchor_daily = []
+    for douyin_id, daily in anchor_daily_paid.items():
+        info = id_to_info.get(douyin_id, {})
+        name = info.get('主播昵称') or douyin_id
+        daily_paid_wan = [round(daily.get(full, 0) / 10000, 2) for full in all_dates]
+        all_anchor_daily.append({
+            'name': str(name),
+            'douyin_id': douyin_id,
+            'daily_paid': daily_paid_wan
+        })
+    all_anchor_daily.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
+
     # === 7b. 自达号子机构每日 ROI（加权：ΣGMV / Σ消耗）===
     zdh_daily_roi_by_sub = {}
     zdh_anchor_ids_by_sub = defaultdict(list)
@@ -444,6 +457,7 @@ def run():
                 for douyin_id in anchor_daily_gmv
             },
             'person_anchor_detail': person_anchor_detail,
+            'all_anchor_daily': all_anchor_daily,
             'agency_top5_anchors': agency_top5_anchors,
         },
         'zidahao': {
