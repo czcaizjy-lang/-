@@ -572,10 +572,10 @@ function renderKPIs() {
       <div class="kpi-value green">${fmt(settled, 'money')}</div>
       <div class="kpi-sub">结算率 ${total > 0 ? ((settled/total)*100).toFixed(1) : '0'}%</div>
     </div>
-    <div class="kpi-card" style="cursor:pointer" onclick="showOverallDrill(trendLastIndex())" title="点击查看全部达人当日 vs 前日变化">
+    <div class="kpi-card">
       <div class="kpi-label">退款GMV</div>
       <div class="kpi-value red">${fmt(refund, 'money')}</div>
-      <div class="kpi-sub">退款率 ${total > 0 ? ((refund/total)*100).toFixed(1) : '0'}% · 点击下探</div>
+      <div class="kpi-sub">退款率 ${total > 0 ? ((refund/total)*100).toFixed(1) : '0'}%</div>
     </div>
   `;
   document.getElementById('kpiGrid').innerHTML = html;
