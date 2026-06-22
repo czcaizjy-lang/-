@@ -283,7 +283,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <div class="chart-grid" style="grid-template-columns: 1fr 1fr;">
   <div class="chart-card">
-    <div class="chart-card-title">每日总业绩趋势</div>
+    <div class="chart-card-title">达播组每日总业绩趋势</div>
     <div class="chart-canvas-wrap"><canvas id="totalTrendChart"></canvas></div>
   </div>
   <div class="chart-card">
@@ -1746,7 +1746,7 @@ function closePersonDrillModal() {
   document.getElementById('personDrillModal').style.display = 'none';
 }
 
-// ---- 每日总业绩趋势下探（全部达人日环比变化） ----
+// ---- 达播组每日总业绩趋势下探（全部达人日环比变化） ----
 function showOverallDrill(dateIndex) {
   var allAnchors = DATA.trend && DATA.trend.all_anchor_daily;
   if (!allAnchors || allAnchors.length === 0) {
