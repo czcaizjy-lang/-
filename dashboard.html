@@ -1503,6 +1503,23 @@ function showZidahaoRoiDrill() {
     spanGaps: true
   }));
 
+  // 添加整体 ROI 线（全部自达号加权）
+  var overallRoi = z.daily_roi_overall;
+  if (overallRoi && overallRoi.length > 0) {
+    datasets.push({
+      label: '整体 ROI',
+      data: overallRoi,
+      borderColor: '#ffffff',
+      backgroundColor: 'transparent',
+      borderWidth: 3,
+      borderDash: [6, 3],
+      pointRadius: 3,
+      pointHoverRadius: 7,
+      tension: 0.35,
+      spanGaps: true
+    });
+  }
+
   window.__agencyDrillFocusMode = false;
   window.__agencyDrillChart = new Chart(ctx, {
     type: 'line',

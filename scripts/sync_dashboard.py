@@ -423,6 +423,15 @@ def run():
             roi_values.append(roi)
         zdh_daily_roi_by_sub[sub] = roi_values
 
+    # 整体 ROI（全部自达号加权：ΣGMV / Σ消耗）
+    zdh_daily_roi_overall = []
+    all_zdh_ids = list(zdh_id_to_sub.keys())
+    for full in all_dates:
+        total_gmv = sum(zdh_anchor_daily_gmv.get(aid, {}).get(full, 0) for aid in all_zdh_ids)
+        total_ad = sum(zdh_anchor_daily_ad_cost.get(aid, {}).get(full, 0) for aid in all_zdh_ids)
+        roi = round(total_gmv / total_ad, 2) if total_ad > 0 else None
+        zdh_daily_roi_overall.append(roi)
+
     # === 8. 构建最终 JSON ===
     dashboard_data = {
         'summary': summary,
@@ -484,6 +493,7 @@ def run():
             ],
             'top5_by_sub': zdh_top5_by_sub,
             'daily_roi_by_sub': zdh_daily_roi_by_sub,
+            'daily_roi_overall': zdh_daily_roi_overall,
             'anchor_detail': zdh_anchor_detail,
         },
     }
