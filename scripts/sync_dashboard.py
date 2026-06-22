@@ -178,9 +178,13 @@ def run():
     zdh_anchor_daily_gmv = defaultdict(lambda: defaultdict(float))
     zdh_anchor_daily_paid = defaultdict(lambda: defaultdict(float))
     zdh_anchor_daily_ad_cost = defaultdict(lambda: defaultdict(float))
+    live_name_map = {}  # 抖音号 → 昵称（从 6月直播数据 sheet 收集，覆盖最全）
 
     for r in range(2, ws_live.max_row + 1):
         douyin_id_raw = ws_live.cell(r, 3).value
+        nickname_raw = ws_live.cell(r, 2).value
+        if douyin_id_raw:
+            live_name_map[str(douyin_id_raw)] = str(nickname_raw or '')
         dt_val = ws_live.cell(r, 4).value
         gmv = float(ws_live.cell(r, 26).value or 0)
         paid = float(ws_live.cell(r, 27).value or 0)
@@ -394,7 +398,7 @@ def run():
     all_anchor_daily = []
     for douyin_id, daily in anchor_daily_paid.items():
         info = id_to_info.get(douyin_id, {})
-        name = info.get('主播昵称') or douyin_id
+        name = live_name_map.get(douyin_id) or info.get('主播昵称') or douyin_id
         daily_paid_wan = [round(daily.get(full, 0) / 10000, 2) for full in all_dates]
         all_anchor_daily.append({
             'name': str(name),
