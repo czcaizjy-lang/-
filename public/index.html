@@ -1285,11 +1285,16 @@ function renderAgencies() {
     let avgGMV = a['人均直播GMV'] || 0;
     let refund = a['直播退款GMV'] || 0;
     let settled = a['直播结算GMV'] || 0;
-    let rate = a['预估结算率'] || 0;
+    // 自达号：预估结算率 = 结算GMV / 直播GMV；全部：沿用数据源预估值
+    let rate = currentDataSource === 'zidahao'
+      ? (gmv > 0 ? (parseFloat(settled) / parseFloat(gmv)) : 0)
+      : (a['预估结算率'] || 0);
     let commission = a['佣金支出'] || 0;
     let service = a['团长服务费'] || 0;
     let ad = a['投放消耗金额'] || 0;
     let totalCost = (parseFloat(commission)||0) + (parseFloat(service)||0) + (parseFloat(ad)||0);
+    // 自达号：机构ROI = 直播GMV / 消耗金额（消耗为0时显示 -）
+    let agencyRoi = (currentDataSource === 'zidahao' && ad > 0) ? (parseFloat(gmv) / parseFloat(ad)) : null;
     let pct = maxAgencyGMV > 0 ? ((parseFloat(gmv)/maxAgencyGMV)*100).toFixed(0) : 0;
 
     html += `
@@ -1300,7 +1305,9 @@ function renderAgencies() {
       <div class="agency-row"><span class="label">人均GMV</span><span class="value">¥${(parseFloat(avgGMV)/10000).toFixed(1)}万</span></div>
       <div class="agency-row"><span class="label">结算GMV</span><span class="value">¥${(parseFloat(settled)/10000).toFixed(1)}万</span></div>
       <div class="agency-row"><span class="label">预估结算率</span><span class="value"><span class="tag ${rate >= 0.4 ? 'tag-green' : rate >= 0.2 ? 'tag-orange' : 'tag-red'}">${(parseFloat(rate)*100).toFixed(1)}%</span></span></div>
-      <div class="agency-row"><span class="label">总费用</span><span class="value">¥${(totalCost/10000).toFixed(1)}万</span></div>
+      ${currentDataSource === 'zidahao'
+        ? '<div class="agency-row"><span class="label">机构ROI</span><span class="value">' + (agencyRoi !== null ? agencyRoi.toFixed(2) : '-') + '</span></div>'
+        : '<div class="agency-row"><span class="label">总费用</span><span class="value">¥' + (totalCost/10000).toFixed(1) + '万</span></div>'}
       <div class="agency-bar"><div class="agency-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
   });
