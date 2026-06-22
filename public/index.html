@@ -345,7 +345,10 @@ tbody tr:last-child td { border-bottom: none; }
   <div style="background:var(--card);border-radius:16px;padding:24px;width:90%;max-width:700px;position:relative;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <h3 id="agencyDrillTitle" style="margin:0;font-size:16px;"></h3>
-      <button onclick="closeAgencyDrillModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;">&times;</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="agencyDrillShowAllBtn" onclick="agencyDrillShowAll()" style="background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:11px;display:none;">全部显示</button>
+        <button onclick="closeAgencyDrillModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;">&times;</button>
+      </div>
     </div>
     <div id="agencyDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:14px;">Top 5 达人 · 6月1日至今每日支付 GMV</div>
     <div style="height:320px;position:relative;"><canvas id="agencyDrillChart"></canvas></div>
@@ -1521,7 +1524,6 @@ function showZidahaoRoiDrill() {
     });
   }
 
-  window.__agencyDrillFocusMode = false;
   window.__agencyDrillChart = new Chart(ctx, {
     type: 'line',
     data: { labels: dates, datasets },
@@ -1533,21 +1535,25 @@ function showZidahaoRoiDrill() {
         const chart = window.__agencyDrillChart;
         if (!chart) return;
         if (elements.length === 0) {
-          if (window.__agencyDrillFocusMode) {
-            for (let i = 0; i < chart.data.datasets.length; i++) {
+          // 点击空白区域 → 全部显示
+          var hasHidden = false;
+          for (var i = 0; i < chart.data.datasets.length; i++) {
+            if (chart.getDatasetMeta(i).hidden) { hasHidden = true; break; }
+          }
+          if (hasHidden) {
+            for (var i = 0; i < chart.data.datasets.length; i++) {
               chart.getDatasetMeta(i).hidden = false;
             }
-            window.__agencyDrillFocusMode = false;
             chart.update();
+            updateShowAllButton(chart);
           }
           return;
         }
-        const clickedIdx = elements[0].datasetIndex;
-        for (let i = 0; i < chart.data.datasets.length; i++) {
-          chart.getDatasetMeta(i).hidden = (i !== clickedIdx);
-        }
-        window.__agencyDrillFocusMode = true;
+        // 点击曲线 → 隐藏该机构
+        var clickedIdx = elements[0].datasetIndex;
+        chart.getDatasetMeta(clickedIdx).hidden = true;
         chart.update();
+        updateShowAllButton(chart);
       },
       plugins: {
         legend: {
@@ -1555,20 +1561,12 @@ function showZidahaoRoiDrill() {
           labels: { color: cc.legend, font: { size: 11 }, padding: 12, boxWidth: 12, usePointStyle: true, pointStyle: 'circle' },
           onClick: function(evt, legendItem, legend) {
             const chart = legend.chart;
-            const clickedIdx = legendItem.datasetIndex;
-            const total = chart.data.datasets.length;
-            if (window.__agencyDrillFocusMode) {
-              for (let i = 0; i < total; i++) {
-                chart.getDatasetMeta(i).hidden = false;
-              }
-              window.__agencyDrillFocusMode = false;
-            } else {
-              for (let i = 0; i < total; i++) {
-                chart.getDatasetMeta(i).hidden = (i !== clickedIdx);
-              }
-              window.__agencyDrillFocusMode = true;
-            }
+            const idx = legendItem.datasetIndex;
+            // 切换该数据集的显示/隐藏（Chart.js 默认行为）
+            const meta = chart.getDatasetMeta(idx);
+            meta.hidden = !meta.hidden;
             chart.update();
+            updateShowAllButton(chart);
           }
         },
         tooltip: {
@@ -1938,7 +1936,28 @@ function closeAgencyDrillModal() {
   document.getElementById('agencyDrillModal').style.display = 'none';
 }
 
+function updateShowAllButton(chart) {
+  var btn = document.getElementById('agencyDrillShowAllBtn');
+  if (!btn) return;
+  var hasHidden = false;
+  for (var i = 0; i < chart.data.datasets.length; i++) {
+    if (chart.getDatasetMeta(i).hidden) { hasHidden = true; break; }
+  }
+  btn.style.display = hasHidden ? '' : 'none';
+}
+
+function agencyDrillShowAll() {
+  var chart = window.__agencyDrillChart;
+  if (!chart) return;
+  for (var i = 0; i < chart.data.datasets.length; i++) {
+    chart.getDatasetMeta(i).hidden = false;
+  }
+  chart.update();
+  updateShowAllButton(chart);
+}
+
 function showAgencyDrill(agencyName, agencyColor) {
+  document.getElementById('agencyDrillShowAllBtn').style.display = 'none';
   const cc = getChartColors();
   // 根据当前数据源选择 Top 5 数据
   let top5;
