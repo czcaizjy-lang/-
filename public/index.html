@@ -1285,10 +1285,8 @@ function renderAgencies() {
     let avgGMV = a['人均直播GMV'] || 0;
     let refund = a['直播退款GMV'] || 0;
     let settled = a['直播结算GMV'] || 0;
-    // 自达号：预估结算率 = 结算GMV / 直播GMV；全部：沿用数据源预估值
-    let rate = currentDataSource === 'zidahao'
-      ? (gmv > 0 ? (parseFloat(settled) / parseFloat(gmv)) : 0)
-      : (a['预估结算率'] || 0);
+    // 预估结算率 = 结算GMV / 直播GMV（前端实时计算，不依赖上游）
+    let rate = gmv > 0 ? (parseFloat(settled) / parseFloat(gmv)) : 0;
     let commission = a['佣金支出'] || 0;
     let service = a['团长服务费'] || 0;
     let ad = a['投放消耗金额'] || 0;
