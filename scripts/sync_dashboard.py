@@ -325,7 +325,7 @@ def run():
     # === 7. 趋势数据（近 30 天）===
     # ═══════════════════════════════════════════
     trend_dates_full = all_dates[-TREND_DAYS:] if len(all_dates) >= TREND_DAYS else all_dates
-    trend_dates = [d[5:].replace('-', '/') for d in trend_dates_full]
+    trend_dates = [f"{int(d[5:7])}/{int(d[8:10])}" for d in trend_dates_full]
     date_map = {trend_dates_full[i]: trend_dates[i] for i in range(len(trend_dates_full))}
 
     # 每日全量聚合
