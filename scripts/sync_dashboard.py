@@ -513,6 +513,7 @@ def run():
         zdh_anchor_detail.append({
             'name': str(live_name_map.get(douyin_id) or info['主播昵称'] or douyin_id),
             'douyin_id': douyin_id,
+            'agency': str(info.get('机构', '')),
             'daily_paid': vals
         })
     zdh_anchor_detail.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
