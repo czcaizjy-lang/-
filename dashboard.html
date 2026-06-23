@@ -294,7 +294,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <div class="chart-grid" style="grid-template-columns: 1fr 1fr;">
   <div class="chart-card">
-    <div class="chart-card-title">达播组每日总业绩趋势</div>
+    <div class="chart-card-title" id="totalTrendTitle">达播组每日总业绩趋势</div>
     <div class="chart-canvas-wrap"><canvas id="totalTrendChart"></canvas></div>
   </div>
   <div class="chart-card">
@@ -715,10 +715,14 @@ function renderTrendCharts() {
   if (pieDivider) {
     pieDivider.style.display = currentDataSource === 'zidahao' ? 'none' : '';
   }
-  // Update card title based on data source
+  // Update card titles based on data source
   const pieCardTitle = document.querySelector('#pieCard .chart-card-title');
   if (pieCardTitle) {
     pieCardTitle.textContent = currentDataSource === 'zidahao' ? '子机构业绩占比' : '业绩占比';
+  }
+  const totalTitle = document.getElementById('totalTrendTitle');
+  if (totalTitle) {
+    totalTitle.textContent = currentDataSource === 'zidahao' ? '自达号每日总业绩趋势' : '达播组每日总业绩趋势';
   }
 
   // 自达号模式：使用独立渲染函数
