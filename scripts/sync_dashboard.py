@@ -171,7 +171,7 @@ def run():
 
         info = all_roster[douyin_id]
         all_anchor_monthly[douyin_id] = {
-            '主播昵称': info['主播昵称'],
+            '主播昵称': live_name_map.get(douyin_id) or info['主播昵称'],
             '主播抖音号': douyin_id,
             '机构': info['机构'],
             '开播天数': active_days,
@@ -200,7 +200,7 @@ def run():
 
         info = zdh_roster[douyin_id]
         zdh_anchor_monthly[douyin_id] = {
-            '主播昵称': info['主播昵称'],
+            '主播昵称': live_name_map.get(douyin_id) or info['主播昵称'],
             '主播抖音号': douyin_id,
             '机构': info['机构'],
             '开播天数': active_days,
@@ -461,7 +461,7 @@ def run():
         agency_anchors.sort(key=lambda x: x[1], reverse=True)
         top5 = []
         for douyin_id, _ in agency_anchors[:5]:
-            name = all_roster[douyin_id]['主播昵称']
+            name = live_name_map.get(douyin_id) or all_roster[douyin_id]['主播昵称']
             vals = [round(daily_paid.get(douyin_id, {}).get(d, 0) / 10000, 2) for d in trend_dates_full]
             top5.append({'name': name, 'douyin_id': douyin_id, 'daily_paid': vals})
         if top5:
@@ -478,7 +478,7 @@ def run():
         sub_anchors.sort(key=lambda x: x[1], reverse=True)
         top5 = []
         for douyin_id, _ in sub_anchors[:5]:
-            name = zdh_roster[douyin_id]['主播昵称']
+            name = live_name_map.get(douyin_id) or zdh_roster[douyin_id]['主播昵称']
             vals = [round(daily_paid.get(douyin_id, {}).get(d, 0) / 10000, 2) for d in trend_dates_full]
             top5.append({'name': str(name), 'douyin_id': douyin_id, 'daily_paid': vals})
         if top5:
@@ -490,7 +490,7 @@ def run():
         anchor_list = []
         for douyin_id in douyin_ids:
             info = all_roster.get(douyin_id, {})
-            name = person_name_map.get(douyin_id) or info.get('主播昵称') or douyin_id
+            name = live_name_map.get(douyin_id) or person_name_map.get(douyin_id) or info.get('主播昵称') or douyin_id
             vals = [round(daily_paid.get(douyin_id, {}).get(d, 0) / 10000, 2) for d in trend_dates_full]
             anchor_list.append({'name': str(name), 'douyin_id': douyin_id, 'daily_paid': vals})
         anchor_list.sort(key=lambda x: sum(x['daily_paid']), reverse=True)
@@ -511,7 +511,7 @@ def run():
         info = zdh_roster[douyin_id]
         vals = [round(daily_paid.get(douyin_id, {}).get(d, 0) / 10000, 2) for d in trend_dates_full]
         zdh_anchor_detail.append({
-            'name': str(info['主播昵称'] or douyin_id),
+            'name': str(live_name_map.get(douyin_id) or info['主播昵称'] or douyin_id),
             'douyin_id': douyin_id,
             'daily_paid': vals
         })
