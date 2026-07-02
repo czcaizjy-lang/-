@@ -603,7 +603,7 @@ function renderKPIs() {
         <div class="kpi-value orange">${fmt(adCost, 'money')}</div>
         <div class="kpi-sub">费比 ${total > 0 ? ((adCost/total)*100).toFixed(1) : '0'}%</div>
       </div>
-      <div class="kpi-card" style="cursor:pointer" onclick="showZidahaoRoiDrill()" title="点击查看各机构每日 ROI 趋势">
+      <div class="kpi-card" style="cursor:pointer" onclick="showZidahaoRoiDrill()" title="点击查看整体 ROI 趋势">
         <div class="kpi-label">ROI</div>
         <div class="kpi-value blue">${parseFloat(roi).toFixed(1)}</div>
         <div class="kpi-sub">GMV / 投放消耗 · 点击看趋势</div>
@@ -1695,119 +1695,44 @@ function showZidahaoRoiDrill() {
   const dates = DATA.trend ? DATA.trend.dates : [];
   if (dates.length === 0) return;
 
-  // 优先使用后端预计算的加权 ROI（ΣGMV / Σ消耗）
-  let subDailyRoi = z.daily_roi_by_sub || {};
-
-  // 兼容：如果后端数据不存在，降级为前端简单平均
-  if (!subDailyRoi || Object.keys(subDailyRoi).length === 0) {
-    const roiData = (DATA.trend && DATA.trend.anchor_daily_roi) ? DATA.trend.anchor_daily_roi : {};
-    const subMap = {};
-    (z.anchors || []).forEach(a => {
-      const sub = a['机构'] || '其他';
-      const douyin = String(a['主播抖音号'] || '');
-      if (!subMap[sub]) subMap[sub] = [];
-      subMap[sub].push(douyin);
-    });
-    for (const [sub, douyins] of Object.entries(subMap)) {
-      subDailyRoi[sub] = dates.map(d => {
-        let sum = 0, count = 0;
-        douyins.forEach(dy => {
-          const roi = roiData[dy] ? roiData[dy][d] : undefined;
-          if (roi !== undefined && roi !== null && roi > 0) { sum += roi; count++; }
-        });
-        return count > 0 ? sum / count : null;
-      });
-    }
+  const overallRoi = z.daily_roi_overall;
+  if (!overallRoi || overallRoi.length === 0) {
+    alert('暂无整体 ROI 数据');
+    return;
   }
 
   // 显示弹窗
-  document.getElementById('agencyDrillTitle').textContent = '自达号 · 各机构每日 ROI 趋势';
+  document.getElementById('agencyDrillTitle').textContent = '自达号 · 整体 ROI 趋势';
   document.getElementById('agencyDrillTitle').style.color = 'var(--text)';
-  document.getElementById('agencyDrillSubtitle').textContent = '口径：Σ(机构当日GMV) / Σ(机构当日投放消耗) · 加权计算';
+  document.getElementById('agencyDrillSubtitle').textContent = '口径：Σ(当日GMV) / Σ(当日投放消耗) · 加权计算';
   document.getElementById('agencyDrillModal').style.display = 'flex';
 
   const ctx = document.getElementById('agencyDrillChart').getContext('2d');
   if (window.__agencyDrillChart) window.__agencyDrillChart.destroy();
 
-  const subColors = ['#818cf8','#22c55e','#f59e0b','#ec4899','#14b8a6'];
-  const orderedSubs = ZDH_SUB_AGENCIES.filter(s => subDailyRoi[s]);
-  for (const sub of Object.keys(subDailyRoi)) {
-    if (!orderedSubs.includes(sub)) orderedSubs.push(sub);
-  }
-
-  const datasets = orderedSubs.map((sub, i) => ({
-    label: sub,
-    data: subDailyRoi[sub],
-    borderColor: subColors[i % subColors.length],
+  var datasets = [{
+    label: '整体 ROI',
+    data: overallRoi,
+    borderColor: '#c084fc',
     backgroundColor: 'transparent',
-    borderWidth: 2.2,
-    pointRadius: 2.5,
-    pointHoverRadius: 6,
+    borderWidth: 3,
+    pointRadius: 3,
+    pointHoverRadius: 7,
     tension: 0.35,
     spanGaps: true
-  }));
-
-  // 添加整体 ROI 线（全部自达号加权）
-  var overallRoi = z.daily_roi_overall;
-  if (overallRoi && overallRoi.length > 0) {
-    datasets.push({
-      label: '整体 ROI',
-      data: overallRoi,
-      borderColor: '#c084fc',
-      backgroundColor: 'transparent',
-      borderWidth: 3,
-      borderDash: [6, 3],
-      pointRadius: 3,
-      pointHoverRadius: 7,
-      tension: 0.35,
-      spanGaps: true
-    });
-  }
+  }];
 
   window.__agencyDrillChart = new Chart(ctx, {
     type: 'line',
-    data: { labels: dates, datasets },
+    data: { labels: dates, datasets: datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      onClick: function(evt, elements) {
-        const chart = window.__agencyDrillChart;
-        if (!chart) return;
-        if (elements.length === 0) {
-          // 点击空白区域 → 全部显示
-          var hasHidden = false;
-          for (var i = 0; i < chart.data.datasets.length; i++) {
-            if (chart.getDatasetMeta(i).hidden) { hasHidden = true; break; }
-          }
-          if (hasHidden) {
-            for (var i = 0; i < chart.data.datasets.length; i++) {
-              chart.getDatasetMeta(i).hidden = false;
-            }
-            chart.update();
-            updateShowAllButton(chart);
-          }
-          return;
-        }
-        // 点击曲线 → 隐藏该机构
-        var clickedIdx = elements[0].datasetIndex;
-        chart.getDatasetMeta(clickedIdx).hidden = true;
-        chart.update();
-        updateShowAllButton(chart);
-      },
       plugins: {
         legend: {
           position: 'top',
-          labels: { color: cc.legend, font: { size: 11 }, padding: 12, boxWidth: 12, usePointStyle: true, pointStyle: 'circle' },
-          onClick: function(evt, legendItem, legend) {
-            const chart = legend.chart;
-            const idx = legendItem.datasetIndex;
-            // 切换该数据集的显示/隐藏（Chart.js 默认行为）
-            const meta = chart.getDatasetMeta(idx);
-            meta.hidden = !meta.hidden;
-            chart.update();
-            updateShowAllButton(chart);
-          }
+          labels: { color: cc.legend, font: { size: 11 }, padding: 12, boxWidth: 12, usePointStyle: true, pointStyle: 'circle' }
         },
         tooltip: {
           backgroundColor: cc.tooltipBg,
@@ -1818,8 +1743,8 @@ function showZidahaoRoiDrill() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: ctx => {
-              const v = ctx.parsed.y;
+            label: function(ctx) {
+              var v = ctx.parsed.y;
               return v !== null && v !== undefined
                 ? ctx.dataset.label + ': ROI ' + v.toFixed(2)
                 : ctx.dataset.label + ': 无数据';
