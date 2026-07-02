@@ -1,11 +1,11 @@
 ---
 name: 业绩看板-skill
-description: 蕉下直播业绩追击在线看板的搭建、数据刷新、修改、下钻交互、问题排查（基于 Excel → JSON → 深色/浅色主题 Chart.js 看板）。Use when the user asks to update the performance dashboard, regenerate dashboard_data.json from the upstream Excel, change dashboard layout or charts, fix dashboard bugs, or add drill-down interactions. Trigger keywords 业绩看板、业绩追击、dashboard、刷新看板、Top5下钻、达人下钻、机构下钻、修复看板、KPI、进度条、饼图交互、主题切换、浅色模式、深色模式、自达号、子机构、自达号下钻、自达号总业绩下探、飞书日报、personChart、focusPerson、列宽拖拽、showZidahaoDrill、应达GMV、showExpectedGmv、时均GMV、bar-cell、showOverallDrill、全部达人下探、整体趋势下探、showPersonDrill、all_anchor_daily、消耗口径、被投优先、live_name_map、agencyDrillShowAll、updateShowAllButton、划掉交互、隐藏趋势线。
+description: 蕉下直播业绩追击在线看板的搭建、数据刷新、修改、下钻交互、问题排查（基于 Excel → JSON → 深色/浅色主题 Chart.js 看板）。Use when the user asks to update the performance dashboard, regenerate dashboard_data.json from the upstream Excel, change dashboard layout or charts, fix dashboard bugs, or add drill-down interactions. Trigger keywords 业绩看板、业绩追击、dashboard、刷新看板、Top5下钻、达人下钻、机构下钻、修复看板、KPI、进度条、饼图交互、主题切换、浅色模式、深色模式、自达号、子机构、自达号下钻、自达号总业绩下探、飞书日报、personChart、focusPerson、列宽拖拽、showZidahaoDrill、应达GMV、showExpectedGmv、时均GMV、bar-cell、showOverallDrill、全部达人下探、整体趋势下探、showPersonDrill、showOtherDrill、其他下探、all_anchor_daily、person_anchor_detail、消耗口径、被投优先、live_name_map、agencyDrillShowAll、updateShowAllButton、划掉交互、隐藏趋势线、7月、月度过滤、daily_by_agency。
 ---
 
 # 蕉下直播业绩追击看板
 
-一个实时追踪蕉下直播团队业绩完成情况的数据看板，支持「全部」/「自达号」双数据源切换、多维度下钻分析和深色/浅色双主题切换。附带每天早上 9 点飞书群自动日报推送。
+一个实时追踪蕉下直播团队业绩完成情况的数据看板，支持「全部」/「自达号」双数据源切换、多维度下钻分析和深色/浅色双主题切换。
 
 ## 项目结构
 
@@ -14,18 +14,20 @@ description: 蕉下直播业绩追击在线看板的搭建、数据刷新、修�
 ├── dashboard.html                 # 前端看板页面（含双主题 + 图表 + 下钻）—— 本地开发用
 ├── public/
 │   └── index.html                 # 独立部署页面（build_standalone.py 生成，内嵌数据，GH Pages 入口）
-├── .gitignore                     # 排除 .DS_Store / *.pyc / .opencode/ / .playwright-mcp/
 ├── scripts/
 │   ├── sync_dashboard.py          # 数据提取脚本（核心，读 Excel → 生成 JSON）
-│   ├── watch_sync.py              # Excel 文件监控脚本（5秒轮询，自动同步+构建+部署）
+│   ├── auto_sync.sh               # 自动同步脚本（launchd WatchPaths 触发，含消抖）
 │   ├── build_standalone.py        # 构建独立页面脚本（内嵌 JSON 数据，写入 public/index.html）
-│   ├── daily_report.py            # 飞书日报生成 + 推送脚本
-│   └── run_daily_report.sh        # launchd 包装脚本（含 webhook 环境变量）
+│   ├── watch_sync.py              # （已弃用）旧轮询监控脚本，已被 launchd WatchPaths 替代
+│   ├── daily_report.py            # （已弃用）飞书日报脚本，已于 2026-06-24 停用
+│   └── run_daily_report.sh        # （已弃用）飞书日报 launchd 包装脚本
 ├── data/
-│   └── dashboard_data.json        # 生成的 JSON 数据文件（已提交 Git）
+│   ├── dashboard_data.json        # 生成的 JSON 数据文件（1.5 MB）
+│   ├── sync.log                   # auto_sync.sh 同步日志
+│   └── server.log                 # 本地 HTTP 服务器日志
 └── .opencode/skills/              # AI skill 配置
 
-上游数据源：
+上游数据源:
 /Users/xiaocao/Desktop/蕉下文件/业绩追击/by月业绩/6月业绩/6月业绩追击（纯直播）.xlsx
 ```
 
@@ -38,105 +40,55 @@ cd "/Users/xiaocao/CC/每日业绩自动统计"
 python3 scripts/sync_dashboard.py
 ```
 
-### 自动同步 + 部署
+此命令会自动执行数据提取 + 构建页面两步。
 
-`watch_sync.py` 监控 Excel 文件变化，检测到修改后自动执行三步流水线：
+### 自动同步 + 部署（launchd WatchPaths）
+
+采用 macOS 原生内核级文件监控，**Excel 保存时自动触发，其他时间零进程、零 CPU、零内存**。
 
 ```
-Excel 被修改 → 消抖 3 秒 → ① sync_dashboard.py（提取数据）
-                              → ② build_standalone.py（生成独立页面）
-                              → ③ git push（推送到 GitHub Pages）
+Excel 保存 → macOS 内核 WatchPaths 检测到变化
+         → launchd 启动 auto_sync.sh
+              → 消抖 5~10 秒（双重防抖）
+              → ① sync_dashboard.py（提取数据，通过 osascript 获取桌面文件权限）
+              → ② build_standalone.py（生成独立页面）
+              → ③ git push（推送到 GitHub Pages）
+         → 脚本退出，恢复零占用
 ```
 
-watch_sync 由 crontab `@reboot` 开机启动，5 秒轮询 Excel 变化。
+### launchd 任务管理
+
+| 任务名 | 作用 | 触发方式 |
+|--------|------|---------|
+| `com.dashboard.sync` | Excel 保存 → 同步 + 构建 + 推送 | WatchPaths 文件变化 |
+| `com.dashboard.local-server` | 本地 HTTP 服务器 :8976 | 开机自启，常驻（~10MB） |
 
 ```bash
-# 查看监控状态
-ps aux | grep watch_sync | grep -v grep
+# 查看任务状态
+launchctl list | grep dashboard
+
+# 手动触发一次同步（测试用）
+bash /Users/xiaocao/CC/每日业绩自动统计/scripts/auto_sync.sh
 
 # 查看同步日志
-tail -f /tmp/dashboard_sync.log
+tail -f /Users/xiaocao/CC/每日业绩自动统计/data/sync.log
 
-# 手动启动（如进程挂了）
-nohup python3 scripts/watch_sync.py > /tmp/dashboard_sync.log 2>&1 &
+# 卸载/重载
+launchctl unload ~/Library/LaunchAgents/com.dashboard.sync.plist
+launchctl load ~/Library/LaunchAgents/com.dashboard.sync.plist
 ```
 
-**线上看板地址**：`https://czcaizjy-lang.github.io/-/`（GitHub Pages，每次 git push 后 30 秒内生效）
+### 本地看板
 
-### 启动 HTTP 服务器
-
-```bash
-cd "/Users/xiaocao/CC/每日业绩自动统计"
-python3 -m http.server 8976
-```
+本地 HTTP 服务器由 launchd 自动管理（`com.dashboard.local-server`），端口 8976，开机自启。
 
 访问 `http://localhost:8976/dashboard.html`
 
-### 手动推送飞书日报
+**线上看板地址**：`https://czcaizjy-lang.github.io/-/`（GitHub Pages，每次 git push 后 30 秒内生效）
 
-```bash
-FEISHU_WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/c44a79bd-5386-4145-ac27-50dda5a6a7fa" python3 scripts/daily_report.py
-```
+### macOS 权限要求
 
-或直接跑包装脚本：
-
-```bash
-/bin/bash scripts/run_daily_report.sh
-```
-
-## 飞书日报系统
-
-### 推送时间
-
-每天早上 **9:05**（由 launchd 调度，比整点晚 5 分钟错峰）。
-
-### 调度方式：launchd（不用 cron）
-
-macOS 的 cron 经常因安全权限静默失败，已换成原生 `launchd`。
-
-**配置文件**：`~/Library/LaunchAgents/com.dashboard.daily-report.plist`
-
-**管理命令**：
-```bash
-# 加载
-launchctl load ~/Library/LaunchAgents/com.dashboard.daily-report.plist
-
-# 卸载
-launchctl unload ~/Library/LaunchAgents/com.dashboard.daily-report.plist
-
-# 查看状态
-launchctl print gui/$(id -u)/com.dashboard.daily-report
-```
-
-**日志**：`/tmp/daily_report.log`、`/tmp/daily_report_err.log`
-
-**Crontab 仅保留** watch_sync 的开机启动：
-```
-@reboot nohup /usr/bin/python3 /Users/xiaocao/CC/每日业绩自动统计/scripts/watch_sync.py > /tmp/dashboard_sync.log 2>&1 &
-```
-
-### 日报内容（5 大板块）
-
-1. **月度总览** — 累计 GMV / 退款 / 投放 / 佣金 / 利润 / 达成率
-2. **星辞昨日战报** — 仅星辞的 GMV / 支付 GMV / 退款 + 环比
-3. **时间进度对标** — 时间进度 vs 达成率，应达 vs 实际 GMV
-4. **达人掉量预警 Top5** — 仅主力机构（排除"其他"），环比下跌最大 5 人 + 原因推断
-5. **机构昨日 GMV Top5** — 排名带奖牌
-
-### 飞书消息格式要点
-
-- `msg_type: "post"`（富文本）
-- 每行是 `[[{"tag":"text","text":"..."}], ...]`
-- ⚠️ **text 标签不支持 `style` 属性**，会报 `19002` 错误
-- Webhook URL 硬编码在 `run_daily_report.sh` 和 `launchd plist` 中，不在 Python 脚本里
-
-### daily_report.py 关键常量
-
-```python
-DAYS_IN_MONTH = 30  # 6月，跨月需修改
-WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-MAIN_AGENCIES = ['自达号', '集米文化', '紫语', '花开满路', '太古', '亦初', '直属']
-```
+launchd 启动的进程默认无权访问桌面文件。**必须将 `/bin/bash` 加入「系统设置 → 隐私与安全性 → 完全磁盘访问权限」**，否则 sync_dashboard.py 会报 `PermissionError`。
 
 ## 主题系统
 
@@ -171,9 +123,8 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 
 - **星辞业绩**: **花名册**（仅读 col 1 昵称、col 2 抖音号、col 9 机构），不再读取月度汇总数值列
 - **星辞自达号业绩**: **自达号花名册**（仅读 col 1 昵称、col 2 抖音号、col 10 子机构），不再读取月度汇总数值列
-- **总自达号业绩**: 自达号逐日明细表（4938 行），col 3 机构归属，含每日 GMV/退款/结算/消耗/ROI
 - **X月直播数据**: 逐日逐条直播明细（自动识别名称含「直播数据」的 Sheet），col 3 是抖音号、col 4 是日期、col 6 直播时长、col 26 GMV、col 27 支付金额、col 32 退款、col 34 佣金支出、col 44 投放消耗(店铺绑定)、col 45 投放消耗(店铺被投)
-- **久酒业绩 / 雅宁业绩 / 星辞业绩**: 个人 Sheet，仅读 col 1（昵称）+ col 2（抖音号）作为花名册，按抖音号匹配到日流水统计三人分天业绩（支付、GMV、退款）
+- **久酒业绩 / 雅宁业绩**: 个人 Sheet，仅读 col 1（昵称）+ col 2（抖音号）作为花名册，按抖音号匹配到日流水统计三人分天业绩（支付、GMV、退款）
 
 ### 关键列对应关系
 
@@ -183,12 +134,12 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 | 机构汇总 | 星辞业绩 | - | - | col 27-39 |
 | 自达号达人 | 星辞自达号业绩 | col 2 | - | col 10 (子机构), 13 (GMV), 20 (结算), 25 (消耗), 26 (ROI) |
 | 自达号子机构 | 星辞自达号业绩 | - | - | col 31-47 (rows 3-7) |
-| 直播明细 | 6月直播数据 | col 3 | col 4 | col 26 (GMV), 27 (支付), 32 (退款), 44 (投放绑定), 45 (投放被投) |
-| 三人分天 | 久酒/雅宁/星辞业绩 | col 2 | - | 匹配到 6月直播数据汇总 |
+| 直播明细 | X月直播数据 | col 3 | col 4 | col 26 (GMV), 27 (支付), 32 (退款), 44 (投放绑定), 45 (投放被投) |
+| 三人分天 | 久酒/雅宁/星辞业绩 | col 2 | - | 匹配到 X月直播数据汇总 |
 
 **关键口径**：
 
-- **月份自动识别**：从日流水最大日期提取月份（如 `2026-07`），所有月度聚合自动按该月过滤
+- **月份自动识别**：从日流水最大日期提取月份（如 `2026-06`），所有月度聚合自动按该月过滤
 - **所有数值均从日流水实时计算**：GMV、支付、退款、消耗、佣金、开播天数、日均时长等均从「X月直播数据」聚合，不再读取 Excel 汇总表中的预计算值
 - **结算GMV** = 支付金额 - 退款GMV
 - **每日消耗** = **优先取 col 45（投放消耗店铺被投），为 0 时回退到 col 44（投放消耗店铺绑定）**
@@ -197,6 +148,7 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 - **趋势窗口** = 近 30 天滚动（以日流水最新日期为终点前推 30 天）
 - **分日子机构 ROI** = Σ(子机构当日所有达人 GMV) / Σ(子机构当日所有达人消耗)，加权计算，非简单平均
 - **「其他」= 全部日流水达人 - 久酒 - 雅宁 - 星辞**，在三人分天图中作为第 4 条灰色虚线展示
+- **达人昵称优先级**：日流水 B 列 > 花名册 A 列，日流水覆盖最全
 - 已移除字段：团长服务费、预测税后收入、预测直播结算GMV、预估利润、预估6月收入、当前收入达成率、4月结算率、达人备注
 
 ### JSON 数据结构
@@ -210,7 +162,7 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
   agencies: [],     // 机构列表（当月聚合）
   zidahao: {},      // 自达号专用数据（summary/sub_agencies/anchors/daily_*/top5_by_sub）
   trend: {
-    dates: [],                    // 近30天日期数组 ["06/01", "06/02", ...]
+    dates: [],                    // 近30天日期数组 ["05/25", "05/26", ...]
     daily_total_gmv: [],          // 每日总GMV（万）
     daily_total_paid: [],         // 每日总支付金额（万）
     daily_total_refund: [],       // 每日总退款（万）
@@ -231,10 +183,10 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
       久酒: [], 雅宁: [], 星辞: []
     },
     anchor_daily_paid: {          // 达人分天支付（点击下钻用）
-      "抖音号": {"06/01": 123.45, "06/02": 234.56}
+      "抖音号": {"05/25": 123.45, "05/26": 234.56}
     },
-    anchor_daily_roi: {           // 达人分天 ROI (GMV / 投放消耗，每日消耗用 max(col44,col45))
-      "抖音号": {"06/01": 8.92, "06/02": 11.52}
+    anchor_daily_roi: {           // 达人分天 ROI
+      "抖音号": {"05/25": 8.92, "05/26": 11.52}
     },
     agency_top5_anchors: {        // 机构 Top5 达人分天数据
       "自达号": [
@@ -245,25 +197,25 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
     person_anchor_detail: {       // 人员下探：每人下属所有达人分天支付明细
       "久酒": [
         {name: "达人A", douyin_id: "xxx", daily_paid: [1.2, 3.4, ...]},
-        ...  // 63人（按支付额降序）
+        ...
       ],
-      "雅宁": [...],   // 197人
-      "星辞": [...]    // 262人
+      "雅宁": [...],
+      "星辞": [...]
     },
-    all_anchor_daily: [           // 全部达人下探：所有达人分天支付明细（不区分久酒/雅宁/星辞）
+    all_anchor_daily: [           // 全部达人下探：所有达人分天支付明细
       {name: "达人A", douyin_id: "xxx", daily_paid: [12.3, 23.4, ...]},
-      ...  // 678人（按支付额降序），昵称优先从 Sheet1 B 列读取
+      ...
     ]
   },
-  zidahao: {                     // 自达号专用数据
+  zidahao: {
     summary: {                   // 自达号整体汇总
-      直播GMV: 5203736.68,
-      直播结算GMV: 2504575.19,
-      消耗金额: 520469.04,
-      ROI: 9.998
+      直播GMV: 7330844.94,
+      直播结算GMV: ...,
+      消耗金额: ...,
+      ROI: ...
     },
     sub_agencies: [],            // 5 个子机构汇总（花开/集米/太古/九三/直属自达号）
-    anchors: [],                 // 130 个自达号达人（机构 = 子机构名）
+    anchors: [],                 // 138 个自达号达人
     daily_gmv: [],               // 自达号每日 GMV
     daily_paid: [],              // 自达号每日支付
     daily_refund: [],            // 自达号每日退款
@@ -277,20 +229,20 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
         ...
       ]
     },
-    daily_roi_by_sub: {          // 子机构每日加权 ROI（ΣGMV/Σ消耗，非简单平均）
+    daily_roi_by_sub: {          // 子机构每日加权 ROI
       "花开自达号": [10.5, 9.8, null, ...],
-      "集米自达号": [11.2, 10.3, null, ...],
       ...
     },
-    anchor_detail: [             // 自达号下探：所有自达号达人分天支付明细（按支付额降序）
-      {name: "达人A", douyin_id: "xxx", daily_paid: [12.3, 23.4, ...]},
-      ...  // 137人
+    daily_roi_overall: [],       // 自达号整体每日 ROI
+    anchor_detail: [             // 自达号下探：所有自达号达人分天支付明细（含 agency 字段）
+      {name: "达人A", douyin_id: "xxx", agency: "花开自达号", daily_paid: [12.3, ...]},
+      ...
     ]
   }
 }
 ```
 
-**关键**：`agency_top5_anchors` 是全部视图的字段名；`zidahao.top5_by_sub` 是自达号视图的字段名。
+**关键**：`agency_top5_anchors` 是全部视图的字段名；`zidahao.top5_by_sub` 是自达号视图的字段名；`zidahao.anchor_detail` 包含 `agency` 字段用于子机构下探过滤。
 
 ## 前端功能
 
@@ -298,8 +250,9 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 
 导航栏左侧新增「**全部** / **自达号**」切换按钮（橙色选中态），点击切换整个看板的数据源：
 
-- **全部模式**（默认）：全局数据，3 张 KPI 卡片（GMV/结算/退款）、时间进度条、4 个图表、256 达人
-- **自达号模式**：自达号专属数据，4 张 KPI 卡片（GMV/结算/消耗/ROI —— ROI 卡片可点击下钻）、**无时间进度**、3 个图表（总趋势/子机构趋势/子机构饼图）、137 自达号达人
+- **全部模式**（默认）：全局数据，3 张 KPI 卡片（GMV/结算/退款）、时间进度条、4 个图表、265 达人
+- **自达号模式**：自达号专属数据，4 张 KPI 卡片（GMV/结算/消耗/ROI —— ROI 卡片可点击下钻）、**无时间进度**、3 个图表（总趋势/子机构趋势/子机构饼图）、138 自达号达人
+- **自达号模式布局**：`agencyTrendCard` 通过 `grid-row: 1/3` 撑满右列，与左列两个卡片等高
 
 切换逻辑由 `switchDataSource(source)` 统一管理，设置 `currentDataSource` 全局状态后销毁所有图表并重新渲染。
 
@@ -307,41 +260,43 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 
 - **达播组每日总业绩趋势**（折线图）: 总GMV、支付金额、退款金额，**近 30 天滚动窗口**，x 轴标签间隔显示（约 6 个）；**点击数据点可弹出全部达人的当日 vs 前日变化明细**（`showOverallDrill()`），不区分久酒/雅宁/星辞，跨机构列出所有达人，支持全部/仅下降/仅上涨筛选
 - **每日机构业绩趋势**（折线图）: 7个主力机构，支持点击线/图例聚焦单个机构，再点恢复全部
-- **久酒/雅宁/星辞分天业绩**（折线图）: 三人对比 + **「其他」**（灰色虚线 = 除三人外的全部达人）；标题右侧有 4 个按钮（全部/久酒/雅宁/星辞），点击聚焦单人，再点同一按钮恢复全部；**点击数据点可弹出该人员下所有达人的当日 vs 前日变化明细（人员下探）**（「其他」无下探），支持全部/仅下降/仅上涨筛选
-- **机构业绩占比**（饼图/环形图）: 点击扇区可弹出该机构 Top5 达人弹窗
+- **久酒/雅宁/星辞分天业绩**（折线图）: 三人对比 + **「其他」**（灰色虚线 = 除三人外的全部达人）；标题右侧有 4 个按钮（全部/久酒/雅宁/星辞），点击聚焦单人，再点同一按钮恢复全部；**点击数据点可弹出该人员下所有达人的当日 vs 前日变化明细（人员下探）**（「其他」通过 `showOtherDrill()` 从 `all_anchor_daily` 中排除三人 douyin_id 后展示），支持全部/仅下降/仅上涨筛选
+- **机构业绩占比**（饼图）: 7 个主力机构，仅统计当前月份（7月）业绩，从 `daily_by_agency` 中过滤 `dates` 以 `7/` 开头的日期索引求和，替代旧的全量 `pie_data`
+- **人员业绩占比**（饼图）: 久酒/雅宁/星辞/其他 4 扇区，仅统计当前月份（7月）业绩，从 `person_daily` 中过滤 `7/` 开头的日期索引求和
 
 ### 图表（自达号模式）
 
-- **自达号总业绩趋势**（折线图）: 自达号总 GMV/支付/退款，标签含「自达号」后缀；**点击数据点可弹出所有自达号达人的当日 vs 前日变化明细（`showZidahaoDrill()`）**，支持全部/仅下降/仅上涨筛选
-- **自达号子机构趋势**（折线图）: 5 条子机构线（花开/集米/太古/九三/直属自达号），支持点击聚焦
-- **子机构业绩占比**（饼图/环形图）: 5 个子机构扇区，点击弹出该子机构 Top5 自达号达人分天趋势弹窗
-- **久酒/雅宁/星辞图表**：隐藏（`#personTrendCard` display:none）
+- **自达号总业绩趋势**（折线图）: 自达号总 GMV/支付/退款；**点击数据点可弹出所有自达号达人的当日 vs 前日变化明细**（`showZidahaoDrill()`），支持全部/仅下降/仅上涨筛选
+- **自达号子机构趋势**（折线图）: 5 条子机构线（花开/集米/太古/九三/直属自达号），支持点击聚焦；**点击数据点可弹出该子机构下达人的当日 vs 前日变化明细表**（`showZidahaoSubDrill()`），按变化量降序
+- **子机构业绩占比**（饼图/环形图）: 5 个子机构扇区，仅统计当前月份（7月）业绩，从 `daily_by_sub` 过滤 `7/` 前缀日期求和（替代旧的全量 `pie_data`），点击弹出该子机构 Top5 自达号达人分天趋势弹窗
+- **久酒/雅宁/星辞图表**：隐藏
 
 子机构图表由 `renderZidahaoCharts()` 函数独立渲染，数据结构来自 `DATA.zidahao`。
 
 **自达号 ROI KPI 下钻**：点击 ROI KPI 卡片（带「点击看趋势」提示），弹出各子机构每日 ROI 趋势折线图（5条子机构线 + 1条整体ROI紫色虚线，`showZidahaoRoiDrill()`）。数据来自 `zidahao.daily_roi_by_sub` 和 `zidahao.daily_roi_overall`，口径为 ΣGMV/Σ消耗 加权计算。<br>
-**交互逻辑**：点击曲线 → 隐藏该机构（划掉），保留其他线；点击图例 → 切换对应的显示/隐藏；点击空白区域或「全部显示」按钮 → 恢复全部。与旧版的"聚焦"模式相反。
+**交互逻辑**：点击曲线 → 隐藏该机构（划掉），保留其他线；点击图例 → 切换对应的显示/隐藏；点击空白区域或「全部显示」按钮 → 恢复全部。
 
 ### 交互
 
 - **数据源切换**: 点击「全部」/「自达号」按钮，销毁全部图表后重新渲染（`switchDataSource()`）
 - **主题切换**: Header 右侧 🌙/☀️ 按钮，深色/浅色双主题，自动保存到 localStorage
 - **机构趋势图**: 点击某条线只显示该机构，再点恢复全部（`window.__agencyFocusMode`）
-- **三人业绩按钮**（`focusPerson()`）: 图表标题右侧 4 个 `.person-btn`，点击聚焦单人曲线，再点同一按钮恢复全部。状态保存在 `window.__personFocused`，按钮样式跟随切换
-- **人员下探**（`showPersonDrill(personName, dateIndex)`）: 点击三人图表任意数据点，弹出该人员下所有达人的当日 vs 前日变化明细表。按掉量降序（最大掉量排第一），红色 ↓ 标注下降、绿色 ↑ 标注上涨。顶部可切换「全部 / ↓ 仅下降 / ↑ 仅上涨」筛选（`filterPersonDrill()`）。数据来自 `trend.person_anchor_detail`，达人昵称优先从人员 sheet A 列读取
-- **整体趋势下探**（`showOverallDrill(dateIndex)`）: 点击达播组每日总业绩趋势图任意数据点，弹出全部达人（678人，不区分机构）的当日 vs 前日变化明细表。复用人员下探弹窗和筛选按钮逻辑，按掉量降序排列。数据来自 `trend.all_anchor_daily`，昵称优先从 Sheet1（6月直播数据）B 列读取
-- **自达号总业绩下探**（`showZidahaoDrill(dateIndex)`）: 点击自达号总业绩趋势图任意数据点，弹出所有自达号达人（137人）的当日 vs 前日变化明细表。复用人员下探弹窗和筛选按钮逻辑，按掉量降序排列。数据来自 `zidahao.anchor_detail`
-- **饼图下钻**: 点击机构扇区弹出 Top5 达人分天曲线（5 种颜色，支持弹窗内点击聚焦）。`showAgencyDrill()` 根据 `currentDataSource` 自动读取 `agency_top5_anchors`（全部）或 `top5_by_sub`（自达号）
+- **三人业绩按钮**（`focusPerson()`）: 图表标题右侧 4 个 `.person-btn`，点击聚焦单人曲线，再点同一按钮恢复全部
+- **人员下探**（`showPersonDrill(personName, dateIndex)`）: 点击三人图表任意数据点，弹出该人员下所有达人的当日 vs 前日变化明细表。按掉量降序（最大掉量排第一），红色 ↓ 标注下降、绿色 ↑ 标注上涨。顶部可切换「全部 / ↓ 仅下降 / ↑ 仅上涨」筛选。数据来自 `trend.person_anchor_detail`
+- **「其他」下探**（`showOtherDrill(dateIndex)`）: 点击「其他」曲线任意数据点，从 `all_anchor_daily` 中排除久酒/雅宁/星辞三人下属达人的 douyin_id，得到「其他」达人集后展示当日 vs 前日变化明细表。复用人员下探弹窗和筛选按钮逻辑。纯前端过滤，无需后端改动
+- **整体趋势下探**（`showOverallDrill(dateIndex)`）: 点击达播组每日总业绩趋势图任意数据点，弹出全部达人的当日 vs 前日变化明细表。复用人员下探弹窗和筛选按钮逻辑，按掉量降序排列。数据来自 `trend.all_anchor_daily`
+- **自达号总业绩下探**（`showZidahaoDrill(dateIndex)`）: 点击自达号总业绩趋势图任意数据点，弹出所有自达号达人的当日 vs 前日变化明细表。数据来自 `zidahao.anchor_detail`
+- **自达号子机构下探**（`showZidahaoSubDrill(subName, dateIndex)`）: 点击子机构趋势图数据点，弹出该子机构下达人的当日 vs 前日变化明细表。通过 `zidahao.anchor_detail` 的 `agency` 字段过滤
+- **饼图下钻**: 点击机构扇区弹出 Top5 达人分天曲线（5 种颜色，支持弹窗内点击聚焦）。`showAgencyDrill()` 根据 `currentDataSource` 自动读取 `agency_top5_anchors`（全部）或 `top5_by_sub`（自达号）。饼图数据仅统计当前月份（7月），从 `daily_by_agency` / `person_daily` 按 `dates` 过滤 `7/` 前缀求和
 - **达人下钻**: 点击达人列表中的「直播GMV」单元格弹出该达人每日支付曲线
 - **ROI 下钻**（2 种入口）：
   - 达人表 ROI 列：点击弹出该达人每日 ROI 趋势（GMV/投放，琥珀色线条）—— `showRoiDrill()`
   - 自达号 ROI KPI 卡片：点击弹出各子机构每日 ROI 趋势（5 条线，加权口径）—— `showZidahaoRoiDrill()`
-- **列拖拽排序**: 达人表头支持 HTML5 拖拽，拖动列头即可调整列顺序（`DISPLAY_COLS` / `ZDH_DISPLAY_COLS` 运行时可变）。全部与自达号使用相同列集合：`['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额']`
+- **列拖拽排序**: 达人表头支持 HTML5 拖拽，拖动列头即可调整列顺序（`DISPLAY_COLS` / `ZDH_DISPLAY_COLS` 运行时可变）
 - **列宽拖拽**: 鼠标移到表头右边缘，光标变 `col-resize`，拖拽调整列宽，宽度保存到 localStorage
 - **搜索**: 输入框回车或点「查询」按钮，不实时过滤
-- **备注编辑**: 达人名下方备注列可编辑，保存到 localStorage
 - **GMV 目标**: 可自定义目标 GMV（万），进度条根据完成情况变色（绿/橙/红），保存在 `localStorage.targetGmvWan`（自达号模式下不显示）
-- **应达 GMV 悬停**（`showExpectedGmv()` / `hideExpectedGmv()`）: 鼠标移到时间进度条上，下方弹出「当前时间进度下应达 GMV ≈ ¥XXX 万」（公式：时间进度% × 目标 GMV），移开消失。数据存在 `window.__expectedGmvWan`
+- **应达 GMV 悬停**（`showExpectedGmv()` / `hideExpectedGmv()`）: 鼠标移到时间进度条上，下方弹出「当前时间进度下应达 GMV ≈ ¥XXX 万」
 
 ### 关键 JS 全局变量
 
@@ -354,32 +309,28 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 | `window.__agencyChart` / `window.__agencyFocusMode` | 机构趋势图表 / 聚焦状态 |
 | `window.__personChart` | 三人分天图表实例（自达号模式下为 null） |
 | `window.__personFocused` | 当前聚焦的人名（`'all'` / `'久酒'` / `'雅宁'` / `'星辞'`） |
-| `window.__agencyPieChart` | 机构饼图实例 |
+| `window.__agencyPieChart` / `window.__personPieChart` | 机构饼图 / 人员饼图实例 |
 | `window.__drillChart` | 达人下钻弹窗图表实例（GMV / ROI 共用） |
-| `window.__agencyDrillChart` / `window.__agencyDrillFocusMode` | 机构 Top5 达人趋势弹窗图表 / 聚焦状态（仅 Top5 图表使用；ROI 趋势图改用隐藏模式） |
+| `window.__agencyDrillChart` / `window.__agencyDrillFocusMode` | 机构 Top5 达人趋势弹窗图表 / 聚焦状态 |
 | `MAIN_AGENCIES` | 主力 7 机构：自达号、集米文化、紫语、花开满路、太古、亦初、直属 |
-| `showZidahaoRoiDrill()` | 自达号 ROI KPI 下钻函数，弹出子机构每日 ROI 趋势（`daily_roi_by_sub` + `daily_roi_overall`）。点击曲线→隐藏（划掉），图例→切换，空白/按钮→全部显示 |
-| `agencyDrillShowAll()` | ROI 趋势图「全部显示」按钮回调，恢复所有被隐藏的线 |
-| `updateShowAllButton(chart)` | 检查是否有隐藏线，控制「全部显示」按钮显隐 |
 | `showPersonDrill(personName, dateIndex)` | 人员下探函数，弹出该人员所有达人的当日 vs 前日变化明细表 |
+| `showOtherDrill(dateIndex)` | 「其他」下探函数，从 `all_anchor_daily` 排除三人后弹出，纯前端过滤 |
 | `showOverallDrill(dateIndex)` | 整体趋势下探函数，弹出全部达人（跨机构）的当日 vs 前日变化明细表 |
-| `filterPersonDrill(filter)` | 人员下探筛选按钮（'all' / 'down' / 'up'），过滤表格并调整排序 |
+| `showZidahaoDrill(dateIndex)` | 自达号总业绩下探函数 |
+| `showZidahaoSubDrill(subName, dateIndex)` | 自达号子机构下探函数，按 agency 过滤 |
+| `filterPersonDrill(filter)` | 人员下探筛选按钮（'all' / 'down' / 'up'） |
 | `closePersonDrillModal()` | 关闭人员下探弹窗 |
-| `showZidahaoDrill(dateIndex)` | 自达号总业绩下探函数，弹出所有自达号达人的当日 vs 前日变化明细表 |
-| `window.__personDrillRows` / `__personDrillPrevDate` / `__personDrillClickedDate` | 人员下探 / 自达号下探缓存的原始数据（共用） |
-| `showExpectedGmv()` / `hideExpectedGmv()` | 时间进度条 hover 事件：显示/隐藏应达 GMV 提示框 |
-| `window.__expectedGmvWan` | 应达 GMV（万），由 `updateProgress()` 计算：时间进度% × 目标 GMV |
+| `window.__personDrillRows` / `__personDrillPrevDate` / `__personDrillClickedDate` | 下探弹窗缓存数据（共用） |
+| `showExpectedGmv()` / `hideExpectedGmv()` | 时间进度条 hover：显示/隐藏应达 GMV 提示框 |
 
 ### 达人表显示规则
 
 - `DISPLAY_COLS` / `ZDH_DISPLAY_COLS` 是运行时可变的数组（支持拖拽调整），通过 `getCols()` 根据 `currentDataSource` 切换
-- **自达号专属列**：`ZDH_DISPLAY_COLS` 将「佣金支出」替换为「时均 GMV」。时均 GMV = 直播GMV ÷ 开播天数 ÷ 日均开播时长（小时），货币格式显示，无有效数据时显示 `-`。排序时动态计算，不依赖数据源中的预计算字段
-- **全部模式列**：`DISPLAY_COLS` 保留「佣金支出」列
-- **直播GMV 柱状条**（`.bar-cell` / `.bar-bg`）：绝对定位背景条，`top: 3px; bottom: 3px` 铺满行高，`opacity: 0.12` 不遮挡文字。文字 `z-index: 1` + `font-weight: 500` 叠加在色条上方，类似 Excel 数据条。宽度按当前列表最大 GMV 为 100% 比例计算
-- **ROI 列**：动态计算 `直播GMV / 投放消耗金额`，显示为数字（如 `8.9`），无投放时显示 `-`。**不显示颜色方块**，字体 15px 加粗
-- **目前结算率**：保留颜色方块（绿 ≥40% / 橙 20-40% / 红 <20%），字体 15px 加粗
-- **居中对齐**：从「开播天数」列起的所有列（表头 + 数据单元格）均 `text-align: center`
-- **抖音号处理**：列拖拽和 ROI 下钻时，必须用 `String(douyinId).replace(/'/g, "\\'")` 转义，因为抖音号可能是数字类型
+- **全部模式列**：`['主播昵称', '机构', '开播天数', '日均开播时长（小时）', '直播GMV', '直播退款GMV', '直播结算GMV', '结算率', 'ROI', '佣金支出', '投放消耗金额']`
+- **自达号模式列**：将「佣金支出」替换为「时均 GMV」。时均 GMV = 直播GMV ÷ 开播天数 ÷ 日均开播时长（小时）
+- **直播GMV 柱状条**（`.bar-cell` / `.bar-bg`）：绝对定位背景条，`opacity: 0.12`，宽度按当前列表最大 GMV 为 100% 比例计算，类似 Excel 数据条
+- **ROI 列**：动态计算，无投放时显示 `-`
+- **结算率**：保留颜色方块（绿 ≥40% / 橙 20-40% / 红 <20%）
 
 ## 部署上线
 
@@ -388,19 +339,20 @@ Header 右侧的圆形按钮：🌙（深色）/ ☀️（浅色），点击切�
 | 平台 | 地址 | 说明 |
 |------|------|------|
 | GitHub Pages | `https://czcaizjy-lang.github.io/-/` | 主站，每次 git push 自动更新 |
-| 本地预览 | `http://localhost:8976/dashboard.html` | 开发调试用 |
+| 本地预览 | `http://localhost:8976/dashboard.html` | 开发调试用，launchd 自动管理 |
 
-### 自动部署（推荐）
+### 自动部署（launchd WatchPaths）
 
-`watch_sync.py` 内置自动部署：Excel 变化 → 数据同步 → 构建页面 → `git push`。只要电脑开机 + watch_sync 在跑，线上看板就自动保持最新。
+Excel 保存 → macOS 内核检测 → `auto_sync.sh` 执行三步流水线 → 脚本退出，零残留。
 
 ```
-监控 Excel 变化
+Excel 保存
     │
-    └── 变化检测到
-          ├── ① python3 scripts/sync_dashboard.py    → 生成 data/dashboard_data.json
-          ├── ② python3 scripts/build_standalone.py  → 生成 public/index.html
-          └── ③ git add + git commit + git push       → 推送到 GitHub Pages
+    ▼  (macOS 内核 WatchPaths)
+auto_sync.sh
+    ├── ① sync_dashboard.py    → 生成 data/dashboard_data.json
+    ├── ② build_standalone.py  → 生成 public/index.html
+    └── ③ git push             → 推送到 GitHub Pages
 ```
 
 ### 手动部署
@@ -411,7 +363,7 @@ cd "/Users/xiaocao/CC/每日业绩自动统计"
 # 第 1 步：提取数据
 python3 scripts/sync_dashboard.py
 
-# 第 2 步：构建独立页面（内嵌 JSON，可直接部署）
+# 第 2 步：构建独立页面（已由 sync_dashboard.py 自动调用，通常无需单独执行）
 python3 scripts/build_standalone.py
 
 # 第 3 步：推送到 GitHub Pages
@@ -429,26 +381,26 @@ git push origin main
 3. 替换为 `<script id="inline-data" type="application/json">{数据}</script>` 内嵌块
 4. 写入 `public/index.html`（GitHub Pages 入口）
 
-这样生成的页面无需本地服务器，可直接通过 `file://` 打开或部署到任何静态托管平台。
+生成的页面无需本地服务器，可直接部署到任何静态托管平台。
 
 ### 部署架构
 
 ```
-本地 Mac                            GitHub (czcaizjy-lang/-)
-┌─────────────┐                    ┌──────────────────────┐
-│ Excel (.xlsx)│                   │  main 分支            │
-│      ↓       │                   │  ├── public/          │
-│ sync_data.py │                   │  │   └── index.html   │
-│      ↓       │   git push        │  └── data/            │
-│ build_stand- │ ───────────────→  │      └── dashboard_   │
-│ alone.py     │                   │         data.json     │
-│      ↓       │                   └──────────┬───────────┘
-│ watch_sync.py│                              │
-└─────────────┘                      GitHub Pages (public/)
-                                      ┌──────────────────┐
-                                      │ czcaizjy-lang.   │
-                                      │ github.io/-/     │
-                                      └──────────────────┘
+本地 Mac                              GitHub (czcaizjy-lang/-)
+┌──────────────────┐                  ┌──────────────────────┐
+│ Excel (.xlsx)    │                  │  main 分支            │
+│      ↓           │                  │  ├── public/          │
+│ sync_dashboard.py│    git push      │  │   └── index.html   │
+│      ↓           │ ───────────────→ │  └── data/            │
+│ build_standalone │                  │      └── dashboard_   │
+│      ↓           │                  │         data.json     │
+│ auto_sync.sh     │                  └──────────┬───────────┘
+│ (launchd 触发)   │                             │
+└──────────────────┘                   GitHub Pages (public/)
+                                       ┌──────────────────┐
+                                       │ czcaizjy-lang.   │
+                                       │ github.io/-/     │
+                                       └──────────────────┘
 ```
 
 ## 常见问题
@@ -466,20 +418,19 @@ fetch('dashboard_data.json?t=' + Date.now()).then(r => r.json()).then(d => {
 }).catch(e => console.error(e));
 ```
 
-### 2. JSON 生成错误
+### 2. JSON 生成错误 / Sheet 找不到
 
 脚本报 `KeyError: 'Worksheet xxx does not exist.'`
 
 **解决**: 检查上游 Excel 文件的 Sheet 名称是否与脚本中硬编码的一致：
 - `星辞业绩`
-- `6月直播数据`
-- `久酒业绩` / `雅宁业绩` / `星辞业绩`
+- `星辞自达号业绩`
+- `X月直播数据`（自动识别含「直播数据」的 Sheet）
+- `久酒业绩` / `雅宁业绩`
 
 ### 3. 日期类型错误
 
-脚本报 `unsupported operand type(s)` 与日期相关的类型错误。
-
-**原因**: Excel 中日期列可能是字符串 `"2026/06/14 07:01:38"` 而非 datetime 对象。
+**原因**: Excel 中日期列可能是字符串而非 datetime 对象。
 
 **解决**: 使用字符串解析：
 ```python
@@ -488,81 +439,69 @@ date_key = str(dt_val)[:10].replace('/', '-')  # 提取 "2026-06-14"
 
 ### 4. 抖音号类型
 
-脚本报 `TypeError: unsupported operand type(s)` 与抖音号相关的类型错误。
+**原因**: 抖音号可能是字符串或数字。
 
-**原因**: 抖音号可能是字符串 `"xxx"` 或数字 `123456`。
-
-**解决**: 始终用字符串比较：
-```python
-douyin_id_str = str(douyin_id)
-```
+**解决**: 始终用字符串比较：`douyin_id_str = str(douyin_id)`
 
 ### 5. 字段名错误
 
 前端报 `Cannot read properties of null` 或 `undefined`。
 
-**排查**: 用浏览器开发工具检查 JSON 字段名是否正确：
+**排查**: 用浏览器开发工具检查 JSON 字段名：
 ```javascript
-// 浏览器控制台
-console.log(DATA.trend.agency_top5_anchors);  // 机构 Top5
-console.log(DATA.trend.person_daily);          // 三人分天支付
-console.log(DATA.trend.person_daily_gmv);      // 三人分天 GMV
-console.log(DATA.trend.person_daily_refund);   // 三人分天退款
-console.log(DATA.trend.person_anchor_detail);  // 人员下探达人明细
-console.log(DATA.trend.all_anchor_daily);       // 全部达人下探明细
-console.log(DATA.trend.anchor_daily_paid);     // 达人分天
+console.log(DATA.trend.agency_top5_anchors);   // 机构 Top5
+console.log(DATA.trend.person_daily);           // 三人分天支付
+console.log(DATA.trend.person_anchor_detail);   // 人员下探达人明细
+console.log(DATA.trend.all_anchor_daily);        // 全部达人下探明细
+console.log(DATA.zidahao.anchor_detail);         // 自达号下探（含 agency 字段）
 ```
 
 ### 6. 自动同步不工作
 
 **排查步骤**:
+
 ```bash
-# 检查监控进程是否运行
-ps aux | grep watch_sync | grep -v grep
+# 1. 检查 launchd 任务状态
+launchctl list | grep dashboard
+# 正常应显示：com.dashboard.sync（PID 为 - 表示休眠中）、com.dashboard.local-server（PID 有值）
 
-# 查看日志
-tail -20 /tmp/dashboard_sync.log
+# 2. 查看同步日志
+tail -20 /Users/xiaocao/CC/每日业绩自动统计/data/sync.log
 
-# 手动测试同步
-cd "/Users/xiaocao/CC/每日业绩自动统计"
-python3 scripts/sync_dashboard.py
+# 3. 检查 macOS 权限：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 确认 /bin/bash 已开启
+#    如日志显示 "PermissionError: Operation not permitted"，说明权限未配置
 
-# 如进程挂了，手动重启
-nohup python3 scripts/watch_sync.py > /tmp/dashboard_sync.log 2>&1 &
+# 4. 手动测试
+bash /Users/xiaocao/CC/每日业绩自动统计/scripts/auto_sync.sh
+
+# 5. 重载 launchd 任务
+launchctl unload ~/Library/LaunchAgents/com.dashboard.sync.plist
+launchctl load ~/Library/LaunchAgents/com.dashboard.sync.plist
 ```
 
 ### 7. 主题切换后图表颜色没变
 
-主题切换时 `applyTheme()` 会调用 `renderTrendCharts()` 重绘所有图表。如果弹窗（下钻图表）处于打开状态，关闭后重新打开即可获得新主题颜色。
+主题切换时 `applyTheme()` 会调用 `renderTrendCharts()` 重绘所有图表。如果弹窗处于打开状态，关闭后重新打开即可获得新主题颜色。
 
-### 8. 飞书日报没推送
-
-**可能原因**：
-
-- **cron 静默失败**（macOS 常见）：已切换为 launchd，检查 `launchctl print gui/$(id -u)/com.dashboard.daily-report`
-- **launchd job 未加载**：`launchctl load ~/Library/LaunchAgents/com.dashboard.daily-report.plist`
-- **脚本报错**：查看 `/tmp/daily_report.log` 和 `/tmp/daily_report_err.log`
-- **webhook 失效**：手动跑一次 `daily_report.py` 确认
-
-### 9. 三个人分天业绩按钮不生效
+### 8. 三个人分天业绩按钮不生效
 
 - 确认 `focusPerson()` 函数存在（搜索 dashboard.html）
 - 确认 `.person-btn` 按钮存在
 - 打开浏览器控制台，检查 `window.__personChart` 是否已创建
 - 强制刷新页面 (`Cmd+Shift+R`)，清除缓存
 
-### 10. 浏览器缓存看到旧版本
+### 9. 浏览器缓存看到旧版本
 
 - 按 `Cmd+Shift+R` 强制刷新
 - 或访问 `http://localhost:8976/dashboard.html?v=2` 绕过缓存
 
-### 11. 自达号模式切换后图表空白 / Canvas 报错
+### 10. 自达号模式切换后图表空白 / Canvas 报错
 
 **原因**：Chart.js 不允许在同一 canvas 上创建第二个实例，必须先 `.destroy()`。
 
-**解决**：`switchDataSource()` 已内置销毁逻辑，正常情况下不应出现。如出现，刷新页面即可。排查时检查 `currentDataSource` 变量值。
+**解决**：`switchDataSource()` 已内置销毁逻辑。如出现，刷新页面即可。排查时检查 `currentDataSource` 变量值。
 
-### 12. 自达号数据不显示或为 0
+### 11. 自达号数据不显示或为 0
 
 **可能原因**：
 - `sync_dashboard.py` 未正确读取 `星辞自达号业绩` sheet
@@ -570,24 +509,31 @@ nohup python3 scripts/watch_sync.py > /tmp/dashboard_sync.log 2>&1 &
 
 **排查**：
 ```javascript
-// 浏览器控制台
-console.log(DATA.zidahao);             // 检查 zidahao 数据是否存在
-console.log(DATA.zidahao.summary);     // 汇总数据
-console.log(DATA.zidahao.anchors.length);  // 应为 130
+console.log(DATA.zidahao);              // 检查 zidahao 数据是否存在
+console.log(DATA.zidahao.summary);      // 汇总数据
+console.log(DATA.zidahao.anchors.length);  // 应为 138
 ```
 
-### 13. 自达号饼图点击没有弹出 Top5 达人
+### 12. 自达号饼图点击没有弹出 Top5 达人
 
-**确认**：`showAgencyDrill()` 在自达号模式下从 `DATA.zidahao.top5_by_sub` 读取数据。如果某个子机构没有直播数据，会提示"暂无 Top 5 达人分天数据"。
+`showAgencyDrill()` 在自达号模式下从 `DATA.zidahao.top5_by_sub` 读取数据。如果某个子机构没有直播数据，会提示"暂无 Top 5 达人分天数据"。
 
-### 14. 跨月数据更新
+### 13. 跨月数据更新
 
 上游 Excel 路径中包含月份（`6月业绩`），跨月后需要更新：
 - `sync_dashboard.py` 中的 `XLSX_PATH`
-- `watch_sync.py` 中的 `XLSX_PATH`
-- `daily_report.py` 中的 `DAYS_IN_MONTH`
+- `auto_sync.sh` 中的 `EXCEL_PATH`
+- `~/Library/LaunchAgents/com.dashboard.sync.plist` 中的 `WatchPaths`
 - 看板标题中的月份（`dashboard.html` h1）
 - 建议每月初检查并更新路径
+
+### 14. macOS 权限错误（PermissionError）
+
+**现象**：`sync.log` 中显示 `PermissionError: [Errno 1] Operation not permitted`
+
+**原因**：launchd 启动的进程无权访问桌面文件。WatchPaths 能检测到文件变化（内核级），但执行脚本时无法读取桌面路径。
+
+**解决**：系统设置 → 隐私与安全性 → 完全磁盘访问权限 → 添加 `/bin/bash` 并开启。
 
 ## Git 托管
 

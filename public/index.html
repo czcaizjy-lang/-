@@ -935,11 +935,19 @@ function renderTrendCharts() {
     });
   }
 
-  // Agency pie chart
-  if (t.agency_totals) {
+  // Agency pie chart（仅统计当前月份 = 7月）
+  if (t.daily_by_agency) {
     const pieCtx = document.getElementById('agencyPieChart').getContext('2d');
     if (window.__agencyPieChart) window.__agencyPieChart.destroy();
-    const pieData = (t.pie_data || []).filter(p => MAIN_AGENCIES.includes(p.name));
+    // 找出7月的日期索引
+    var agencyJulyIdxs = [];
+    (t.dates || []).forEach(function(d, i) { if (d.startsWith('7/')) agencyJulyIdxs.push(i); });
+    // 仅按7月业绩求和
+    const pieData = MAIN_AGENCIES.map(function(name) {
+      var arr = t.daily_by_agency[name] || [];
+      var total = agencyJulyIdxs.reduce(function(s, i) { return s + (arr[i] || 0); }, 0);
+      return { name: name, value: parseFloat(total.toFixed(2)) };
+    }).filter(function(p) { return p.value > 0; });
     window.__agencyPieChart = new Chart(pieCtx, {
       type: 'doughnut',
       data: {
@@ -981,16 +989,21 @@ function renderTrendCharts() {
     });
   }
 
-  // Person pie chart (星辞/雅宁/久酒/其他 业绩占比)
+  // Person pie chart (星辞/雅宁/久酒/其他 业绩占比)（仅统计当前月份 = 7月）
   if (t.person_daily && personPieSection) {
     personPieSection.style.display = '';
     const personCtx = document.getElementById('personPieChart').getContext('2d');
     if (window.__personPieChart) window.__personPieChart.destroy();
     const PERSON_PIE_COLORS = ['#818cf8', '#22c55e', '#f59e0b', '#9ca3af'];
     const personNames = ['久酒', '雅宁', '星辞', '其他'];
+    // 找出7月的日期索引
+    var pdDates = t.person_daily.dates || t.dates || [];
+    var personJulyIdxs = [];
+    pdDates.forEach(function(d, i) { if (d.startsWith('7/')) personJulyIdxs.push(i); });
+    // 仅按7月业绩求和
     const personValues = personNames.map(function(n) {
       var arr = t.person_daily[n] || [];
-      return arr.reduce(function(a, b) { return a + b; }, 0);
+      return personJulyIdxs.reduce(function(sum, i) { return sum + (arr[i] || 0); }, 0);
     });
     // Only render if there's data
     if (personValues.some(function(v) { return v > 0; })) {
@@ -1175,10 +1188,18 @@ function renderZidahaoCharts() {
     }
   });
 
-  // Chart 3: 自达号子机构占比饼图
+  // Chart 3: 自达号子机构占比饼图（仅统计当前月份 = 7月）
   const pieCtx = document.getElementById('agencyPieChart').getContext('2d');
   if (window.__agencyPieChart) window.__agencyPieChart.destroy();
-  const pieData = z.pie_data || [];
+  // 找出7月的日期索引
+  var zdhJulyIdxs = [];
+  dates.forEach(function(d, i) { if (d.startsWith('7/')) zdhJulyIdxs.push(i); });
+  // 仅按7月业绩求和
+  var pieData = ZDH_SUB_AGENCIES.map(function(name) {
+    var arr = z.daily_by_sub[name] || [];
+    var total = zdhJulyIdxs.reduce(function(s, i) { return s + (arr[i] || 0); }, 0);
+    return { name: name, value: parseFloat(total.toFixed(2)) };
+  }).filter(function(p) { return p.value > 0; });
   window.__agencyPieChart = new Chart(pieCtx, {
     type: 'doughnut',
     data: {
