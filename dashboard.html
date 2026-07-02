@@ -462,6 +462,54 @@ function getChartColors() {
   };
 }
 
+// 智能X轴配置：当月日期优先显示，确保月交界和末日刻度不被跳过
+function smartXAxis(cc, fontSize) {
+  fontSize = fontSize || 10;
+  return {
+    grid: { color: cc.grid },
+    ticks: {
+      color: cc.tick,
+      font: { size: fontSize },
+      callback: function(val, index, ticks) {
+        var label = this.getLabelForValue(val);
+        if (!label) return '';
+        // 当月日期始终优先显示
+        if (label.startsWith('7/')) return label;
+        // 月份交界首日始终显示
+        if (index > 0 && ticks[index - 1]) {
+          var prevLabel = this.getLabelForValue(ticks[index - 1].value);
+          if (prevLabel && label.split('/')[0] !== prevLabel.split('/')[0]) return label;
+        }
+        // 首日和末日始终显示
+        if (index === 0 || index === ticks.length - 1) return label;
+        // 其他按步长均匀分布（约 6 个标签）
+        var step = Math.max(1, Math.ceil(ticks.length / 6));
+        if (index % step === 0) return label;
+        return '';
+      }
+    },
+    afterBuildTicks: function(axis) {
+      var labels = axis.chart.data.labels || [];
+      var ticks = axis.ticks;
+      var existing = {};
+      for (var i = 0; i < ticks.length; i++) { existing[ticks[i].value] = true; }
+      // 确保当月首日刻度存在
+      for (var j = 0; j < labels.length; j++) {
+        if (labels[j] && labels[j].startsWith('7/') && !existing[j]) {
+          ticks.push({ value: j, label: labels[j], major: true });
+          break;
+        }
+      }
+      // 确保末日刻度存在
+      var lastIdx = labels.length - 1;
+      if (lastIdx >= 0 && !existing[lastIdx]) {
+        ticks.push({ value: lastIdx, label: labels[lastIdx], major: true });
+      }
+      ticks.sort(function(a, b) { return a.value - b.value; });
+    }
+  };
+}
+
 function applyTheme(theme) {
   currentTheme = theme;
   document.documentElement.setAttribute('data-theme', theme);
@@ -1621,7 +1669,7 @@ function showDrillDown(douyinId, name) {
         }
       },
       scales: {
-        x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 11 } } },
+        x: smartXAxis(cc, 11),
         y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 11 }, callback: v => v + '万' } }
       }
     }
@@ -1677,7 +1725,7 @@ function showRoiDrill(douyinId, name) {
         }
       },
       scales: {
-        x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 11 } } },
+        x: smartXAxis(cc, 11),
         y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 11 } } }
       }
     }
@@ -1752,7 +1800,7 @@ function showZidahaoRoiDrill() {
         }
       },
       scales: {
-        x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 } } },
+        x: smartXAxis(cc, 10),
         y: {
           grid: { color: cc.grid },
           ticks: { color: cc.tick, font: { size: 10 } },
@@ -2443,7 +2491,7 @@ function showAgencyDrill(agencyName, agencyColor) {
         }
       },
       scales: {
-        x: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 } } },
+        x: smartXAxis(cc, 10),
         y: { grid: { color: cc.grid }, ticks: { color: cc.tick, font: { size: 10 }, callback: v => v + '万' } }
       }
     }
