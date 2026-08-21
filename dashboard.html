@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>7月业绩追击 - 星辞看板</title>
+<title>8月业绩追击（纯直播）</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -229,7 +229,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <div class="header">
   <div>
-    <h1>7月业绩追击（纯直播）</h1>
+    <h1>8月业绩追击（纯直播）</h1>
     <div class="subtitle">星辞 · 蕉下运动旗舰店 · <span id="updateTime"></span></div>
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
@@ -251,7 +251,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
     <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;">
       <span style="width:3px;height:14px;background:var(--accent);border-radius:2px;display:inline-block;"></span>
-      7月进度追踪
+      8月进度追踪
     </div>
     <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);">
       <span>目标 GMV：</span>
@@ -273,7 +273,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div id="expectedGmvTooltip" style="display:none;margin-top:6px;padding:6px 10px;border-radius:6px;background:var(--card);border:1px solid var(--border);font-size:12px;color:var(--text2);text-align:center;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--text2);">
-        <span>7月1日</span><span id="timeNowLabel"></span><span>7月31日</span>
+        <span>8月1日</span><span id="timeNowLabel"></span><span>8月31日</span>
       </div>
     </div>
     <div>
@@ -366,7 +366,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button onclick="closeAgencyDrillModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;">&times;</button>
       </div>
     </div>
-    <div id="agencyDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:14px;">Top 5 达人 · 7月1日至今每日支付 GMV</div>
+    <div id="agencyDrillSubtitle" style="font-size:12px;color:var(--text2);margin-bottom:14px;">Top 5 达人 · 8月1日至今每日支付 GMV</div>
     <div style="height:320px;position:relative;"><canvas id="agencyDrillChart"></canvas></div>
   </div>
 </div>
@@ -474,18 +474,15 @@ function smartXAxis(cc, fontSize) {
       callback: function(val, index, ticks) {
         var label = this.getLabelForValue(val);
         if (!label) return null;
-        // 当月日期始终显示
-        if (label.startsWith('7/')) return label;
+        // 首日和末日始终显示
+        if (index === 0 || index === ticks.length - 1) return label;
         // 月份交界首日始终显示
         if (index > 0) {
           var prevLabel = this.getLabelForValue(ticks[index - 1].value);
           if (prevLabel && label.split('/')[0] !== prevLabel.split('/')[0]) return label;
         }
-        // 首日和末日始终显示
-        if (index === 0 || index === ticks.length - 1) return label;
-        // 其他按步长均匀分布（约 6 个标签有字）
-        var step = Math.max(1, Math.ceil(ticks.length / 6));
-        if (index % step === 0) return label;
+        // 每 3 天显示一个日期
+        if (index % 3 === 0) return label;
         return null;
       }
     }
@@ -701,7 +698,7 @@ function updateProgress() {
 
   document.getElementById('timeProgressBar').style.width = timePct.toFixed(1) + '%';
   document.getElementById('timeProgressPct').textContent = timePct.toFixed(1) + '%';
-  document.getElementById('timeNowLabel').textContent = `今天: 7/${day}`;
+  document.getElementById('timeNowLabel').textContent = `今天: 8/${day}`;
 
   const currentGmv = (DATA && DATA.summary) ? (DATA.summary['直播GMV'] || 0) : 0;
   const currentGmvWan = currentGmv / 10000;
@@ -964,14 +961,14 @@ function renderTrendCharts() {
     });
   }
 
-  // Agency pie chart（仅统计当前月份 = 7月）
+  // Agency pie chart（仅统计当前月份 = 8月）
   if (t.daily_by_agency) {
     const pieCtx = document.getElementById('agencyPieChart').getContext('2d');
     if (window.__agencyPieChart) window.__agencyPieChart.destroy();
-    // 找出7月的日期索引
+    // 找出8月的日期索引
     var agencyJulyIdxs = [];
-    (t.dates || []).forEach(function(d, i) { if (d.startsWith('7/')) agencyJulyIdxs.push(i); });
-    // 仅按7月业绩求和
+    (t.dates || []).forEach(function(d, i) { if (d.startsWith('8/')) agencyJulyIdxs.push(i); });
+    // 仅按8月业绩求和
     const pieData = MAIN_AGENCIES.map(function(name) {
       var arr = t.daily_by_agency[name] || [];
       var total = agencyJulyIdxs.reduce(function(s, i) { return s + (arr[i] || 0); }, 0);
@@ -1018,18 +1015,18 @@ function renderTrendCharts() {
     });
   }
 
-  // Person pie chart (星辞/雅宁/久酒/其他 业绩占比)（仅统计当前月份 = 7月）
+  // Person pie chart (星辞/雅宁/久酒/其他 业绩占比)（仅统计当前月份 = 8月）
   if (t.person_daily && personPieSection) {
     personPieSection.style.display = '';
     const personCtx = document.getElementById('personPieChart').getContext('2d');
     if (window.__personPieChart) window.__personPieChart.destroy();
     const PERSON_PIE_COLORS = ['#818cf8', '#22c55e', '#f59e0b', '#9ca3af'];
     const personNames = ['久酒', '雅宁', '星辞', '其他'];
-    // 找出7月的日期索引
+    // 找出8月的日期索引
     var pdDates = t.person_daily.dates || t.dates || [];
     var personJulyIdxs = [];
-    pdDates.forEach(function(d, i) { if (d.startsWith('7/')) personJulyIdxs.push(i); });
-    // 仅按7月业绩求和
+    pdDates.forEach(function(d, i) { if (d.startsWith('8/')) personJulyIdxs.push(i); });
+    // 仅按8月业绩求和
     const personValues = personNames.map(function(n) {
       var arr = t.person_daily[n] || [];
       return personJulyIdxs.reduce(function(sum, i) { return sum + (arr[i] || 0); }, 0);
@@ -1217,13 +1214,13 @@ function renderZidahaoCharts() {
     }
   });
 
-  // Chart 3: 自达号子机构占比饼图（仅统计当前月份 = 7月）
+  // Chart 3: 自达号子机构占比饼图（仅统计当前月份 = 8月）
   const pieCtx = document.getElementById('agencyPieChart').getContext('2d');
   if (window.__agencyPieChart) window.__agencyPieChart.destroy();
-  // 找出7月的日期索引
+  // 找出8月的日期索引
   var zdhJulyIdxs = [];
-  dates.forEach(function(d, i) { if (d.startsWith('7/')) zdhJulyIdxs.push(i); });
-  // 仅按7月业绩求和
+  dates.forEach(function(d, i) { if (d.startsWith('8/')) zdhJulyIdxs.push(i); });
+  // 仅按8月业绩求和
   var pieData = ZDH_SUB_AGENCIES.map(function(name) {
     var arr = z.daily_by_sub[name] || [];
     var total = zdhJulyIdxs.reduce(function(s, i) { return s + (arr[i] || 0); }, 0);
@@ -2385,7 +2382,7 @@ function showAgencyDrill(agencyName, agencyColor) {
   const titleSuffix = (currentDataSource === 'zidahao') ? '自达号达人' : '达人';
   document.getElementById('agencyDrillTitle').textContent = agencyName + ' · Top 5 ' + titleSuffix + '趋势';
   document.getElementById('agencyDrillTitle').style.color = agencyColor;
-  document.getElementById('agencyDrillSubtitle').textContent = 'Top 5 达人 · 7月1日至今每日支付 GMV';
+  document.getElementById('agencyDrillSubtitle').textContent = 'Top 5 达人 · 8月1日至今每日支付 GMV';
   document.getElementById('agencyDrillModal').style.display = 'flex';
 
   const dates = DATA.trend.dates;
