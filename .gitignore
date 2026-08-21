@@ -8,3 +8,6 @@ __pycache__/
 
 # Playwright MCP 会话残留
 .playwright-mcp/
+
+# 运行时日志
+data/*.log
